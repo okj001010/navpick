@@ -1,0 +1,13 @@
+fix_base: false
+merge_fixed_joints: false
+self_collision: true
+import_inertia_tensor: true
+convex_decomp: false
+density: 0.0
+
+default_drive_type: NONE
+default_drive_strength: 0.0
+default_position_drive_damping: 0.0
+
+override_joint_dynamics: false
+make_default_prim: true
