@@ -22,7 +22,7 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 from . import mdp
 from . import handreach_joint_names, non_handreach_joint_names
-from ..base.g1_spawn_info import G1_CFG
+from ..base.g1_spawn_info import G1_FIXED_CFG
 
 ##
 # Scene definition
@@ -196,7 +196,7 @@ class G1HandReachEnvCfg(ManagerBasedRLEnvCfg):
             self.scene.contact_forces.update_period = self.sim.dt
         
         # Scene
-        self.scene.robot = G1_CFG.replace(
+        self.scene.robot = G1_FIXED_CFG.replace(
             prim_path="{ENV_REGEX_NS}/Robot",
         )
 

@@ -21,3 +21,11 @@ if TYPE_CHECKING:
 
 
 # FIXME(OKJ): track body command
+def hand_reach_reward(
+    env: ManagerBasedRLEnv,
+    command_name: str = "hand_reach",
+) -> torch.Tensor:
+    """Reward for reaching the hand to the target."""
+    command = cast(BodyTrackCommand, env.command_manager.get_term(command_name))
+    curr_hand_pose, goal_hand_pose = command.current_and_goal_hand_poses
+    return torch.exp(-4.0 * torch.square(curr_hand_pose - goal_hand_pose).sum(dim=-1))
