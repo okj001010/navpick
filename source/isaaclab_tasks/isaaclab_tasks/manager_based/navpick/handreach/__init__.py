@@ -10,6 +10,7 @@ Humanoid locomotion environment (similar to OpenAI Gym Humanoid-v2).
 import gymnasium as gym
 
 from . import agents
+from ..base import base_joint_names
 
 # Joint names for the hand reach task
 handreach_joint_names = [
@@ -22,6 +23,10 @@ handreach_joint_names = [
     'right_wrist_yaw_joint'
 ]
 
+# Joint names for non-hand reach task
+non_handreach_joint_names = [
+    joint for joint in base_joint_names if joint not in handreach_joint_names
+]
 
 ##
 # Register Gym environments.

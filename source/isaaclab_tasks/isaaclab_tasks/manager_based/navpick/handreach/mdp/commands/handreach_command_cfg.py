@@ -35,11 +35,14 @@ class HandReachCommandCfg(CommandTermCfg):
     current_hand_pose_visualizer_cfg: VisualizationMarkersCfg = FRAME_MARKER_CFG.replace(
         prim_path="/Visuals/Command/current_hand_pose"
     )
+    goal_hand_pose_visualizer_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
+    current_hand_pose_visualizer_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
+
     shoulder_pos_visualizer_cfg = VisualizationMarkersCfg(
         prim_path="/Visuals/Command/shoulder_pos",
         markers={
             "sphere": sim_utils.SphereCfg(
-                radius=0.1,
+                radius=0.01,
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
             ),
         }

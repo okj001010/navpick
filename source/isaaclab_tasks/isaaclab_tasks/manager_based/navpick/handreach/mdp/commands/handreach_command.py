@@ -48,6 +48,8 @@ class HandReachCommand(CommandTerm):
         # create buffers to store the command
         self.goal_hand_pose_b = torch.zeros((env.num_envs, 7), device=env.device)
         self.goal_hand_pose_w = torch.zeros((env.num_envs, 7), device=env.device)
+        self.curr_hand_pose_b = torch.zeros((env.num_envs, 7), device=env.device)
+        self.curr_hand_pose_w = torch.zeros((env.num_envs, 7), device=env.device)
         self.shoulder_pos_w = torch.zeros((env.num_envs, 3), device=env.device)
         
         # metrics
@@ -67,17 +69,22 @@ class HandReachCommand(CommandTerm):
         ), dim=-1)
     
     @property
-    # return curr_hand_pose, goal_hand_pose
+    # return curr_hand_pose, goal_hand_pose in the base frame
     def current_and_goal_hand_poses(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute the current and goal hand poses."""
-        curr_hand_pos, curr_hand_ori = self.get_current_hand_pose_b()
+        curr_hand_pos, curr_hand_ori = math_utils.subtract_frame_transforms(
+            self.robot.data.root_state_w[..., :3],
+            self.robot.data.root_state_w[..., 3:7],
+            self.robot.data.body_state_w[:, self.target_hand_idx, :3],
+            self.robot.data.body_state_w[:, self.target_hand_idx, 3:7],
+        )
         curr_hand_pose = torch.cat((
             curr_hand_pos,
             math_utils.axis_angle_from_quat(curr_hand_ori)
         ), dim=-1)
         goal_hand_pose = self.command
-        return curr_hand_pose, goal_hand_pose
-        
+        return curr_hand_pose, goal_hand_pose   # (N, 6), (N, 6)
+
 
     """
     Operations
@@ -91,19 +98,7 @@ class HandReachCommand(CommandTerm):
             extras[name] = metric.mean().item()
             metric.zero_()
         return extras
-    
-    """
-    Helper functions
-    """    
-    
-    def get_current_hand_pose_b(self) -> tuple[torch.Tensor, torch.Tensor]:
-        hand_position, hand_orientation = math_utils.subtract_frame_transforms(
-            self.robot.data.root_state_w[..., :3],
-            self.robot.data.root_state_w[..., 3:7],
-            self.robot.data.body_state_w[:, self.target_hand_idx, :3],
-            self.robot.data.body_state_w[:, self.target_hand_idx, 3:7],
-        )
-        return hand_position, hand_orientation
+
 
     """
     Implementation specific functions.
@@ -124,9 +119,9 @@ class HandReachCommand(CommandTerm):
         # FIXME(OKJ): we need to sample a random goal in dexterous workspace
         # for now, we just sample a random goal within a hemisphere around the shoulder
         # sample a random goal within a hemisphere around the shoulder
-        theta = torch.rand((self.env.num_envs,), device=self.env.device) * math.pi 
-        phi = torch.rand((self.env.num_envs,), device=self.env.device) * math.pi - math.pi / 2
-        radius = torch.rand((self.env.num_envs,), device=self.env.device) * 0.3
+        theta = -torch.rand((self.env.num_envs,), device=self.env.device) * math.pi
+        phi = torch.rand((self.env.num_envs,), device=self.env.device) * math.pi
+        radius = torch.rand((self.env.num_envs,), device=self.env.device) * 0.2 + 0.2 # radius between 0.2 and 0.4
         goal_pos = radius.unsqueeze(-1) * torch.stack((
             torch.sin(theta) * torch.cos(phi),
             torch.sin(theta) * torch.sin(phi),
@@ -135,8 +130,9 @@ class HandReachCommand(CommandTerm):
         self.goal_hand_pose_w[env_ids, :3] = self.shoulder_pos_w[env_ids] + goal_pos
         
         rpy = torch.rand((self.env.num_envs, 3), device=self.env.device) * math.pi - math.pi / 2
-        self.goal_hand_pose_w[env_ids, 3:7] = math_utils.quat_from_euler_xyz(rpy[:, 0], rpy[:, 1], rpy[:, 2])
-        
+        goal_ori = math_utils.quat_from_euler_xyz(rpy[:, 0], rpy[:, 1], rpy[:, 2])
+        self.goal_hand_pose_w[env_ids, 3:7] = goal_ori
+
         # transform the goal hand pose to the base frame
         goal_hand_pos, goal_hand_quat = math_utils.subtract_frame_transforms(
             self.goal_hand_pose_w[env_ids, :3],
@@ -172,8 +168,15 @@ class HandReachCommand(CommandTerm):
         if not self.robot.is_initialized:
             return
         
-        # visualize the goal hand pose, current hand pose, and shoulder position
-        self.goal_hand_pose_visualizer.visualize(self.goal_hand_pose_w[:, :3], self.goal_hand_pose_w[:, 3:7])
-        curr_hand_pos, curr_hand_ori = self.get_current_hand_pose_b()
+        # visualize the goal hand pose
+        goal_hand_pos = self.goal_hand_pose_w[:, :3]
+        goal_hand_ori = self.goal_hand_pose_w[:, 3:7]
+        self.goal_hand_pose_visualizer.visualize(goal_hand_pos, goal_hand_ori)
+        
+        # visualize the current hand pose
+        curr_hand_pos = self.robot.data.body_state_w[:, self.target_hand_idx, :3]
+        curr_hand_ori = self.robot.data.body_state_w[:, self.target_hand_idx, 3:7]
         self.current_hand_pose_visualizer.visualize(curr_hand_pos, curr_hand_ori)
+        
+        # visualize the shoulder position
         self.shoulder_pos_visualizer.visualize(self.shoulder_pos_w)

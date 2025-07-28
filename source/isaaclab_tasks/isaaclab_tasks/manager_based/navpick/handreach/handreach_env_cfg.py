@@ -21,7 +21,7 @@ from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 from . import mdp
-from . import handreach_joint_names
+from . import handreach_joint_names, non_handreach_joint_names
 from ..base.g1_spawn_info import G1_CFG
 
 ##
@@ -91,7 +91,7 @@ class ObservationsCfg:
             func=handreach_joint_vel_rel,
             noise=Unoise(n_min=-1.5, n_max=1.5),
         )
-        actions = ObsTerm(func=mdp.last_action)
+        actions = ObsTerm(func=mdp.last_action, params={"action_name": "joint_pos"}, noise=Unoise(n_min=-0.01, n_max=0.01))
         hand_reach_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "hand_reach"})
 
         def __post_init__(self):
@@ -107,6 +107,7 @@ class ActionsCfg:
     """Action specifications for the MDP."""
 
     joint_pos = mdp.JointPositionActionCfg(asset_name="robot", joint_names=handreach_joint_names, scale=0.5, use_default_offset=True)
+    fix_joint_pos = mdp.FixJointPositionActionCfg(asset_name="robot", joint_names=non_handreach_joint_names, use_default_offset=True)
 
 
 @configclass
@@ -118,6 +119,7 @@ class CommandsCfg:
         target_hand_name="right_rubber_hand",
         # FIXME(OKJ): Does resampling multiple times in a single episode is better?
         resampling_time_range=(5.0, 5.0), # avoid resampling during the episode
+        debug_vis= True,
     )
 
 

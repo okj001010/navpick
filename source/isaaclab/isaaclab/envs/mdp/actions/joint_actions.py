@@ -140,6 +140,21 @@ class JointAction(ActionTerm):
 
     def reset(self, env_ids: Sequence[int] | None = None) -> None:
         self._raw_actions[env_ids] = 0.0
+        
+
+class FixJointPositionAction(JointAction):
+    """Joint action term that applies the default joint positions to the articulation's joints as position commands.
+
+    This action term is used to fix the joint positions of the articulation to the default joint positions.
+    It is useful for resetting the articulation to a known state.
+    """
+
+    cfg: actions_cfg.FixJointPositionActionCfg
+    """The configuration of the action term."""
+
+    def apply_actions(self):
+        # set position targets to default joint positions
+        self._asset.set_joint_position_target(self._asset.data.default_joint_pos[:, self._joint_ids], joint_ids=self._joint_ids)
 
 
 class JointPositionAction(JointAction):

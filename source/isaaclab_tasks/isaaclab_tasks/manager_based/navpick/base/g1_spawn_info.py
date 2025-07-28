@@ -9,8 +9,9 @@ from isaaclab.assets import ArticulationCfg
 
 G1_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        # FIXME(OKJ): Change to no welder version
-        usd_path=f"source/isaaclab_assets/data/g1_welder/g1_welder.usd",
+        # usd_path=f"source/isaaclab_assets/data/g1_29/g1_29dof_rev_1_0.usd",   # welder
+        # usd_path=f"source/isaaclab_assets/data/g1_29_non_convex/g1_hand.usd",   # something bug
+        usd_path=f"source/isaaclab_assets/data/g1_29_new/g1_29dof_rev_1_0.usd",   # new version
         activate_contact_sensors=True,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
@@ -28,7 +29,7 @@ G1_CFG = ArticulationCfg(
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.80),
+        pos=(0.0, 0.0, 1.80),
         joint_pos={
             ".*_hip_pitch_joint": -0.20,
             ".*_knee_joint": 0.42,

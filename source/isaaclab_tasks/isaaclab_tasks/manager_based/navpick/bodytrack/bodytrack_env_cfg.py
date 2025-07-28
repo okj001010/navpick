@@ -20,9 +20,9 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
-import isaaclab_tasks.manager_based.bodytrack.mdp as mdp
-
-from ..g1_spawn_info import G1_CFG
+from . import mdp
+from . import bodytrack_joint_names, non_bodytrack_joint_names
+from ..base.g1_spawn_info import G1_CFG
 
 ##
 # Scene definition
@@ -45,16 +45,7 @@ class MySceneCfg(InteractiveSceneCfg):
     # robot
     robot: ArticulationCfg = MISSING
     
-    # sensors
-    # NOTE(OKJ): do we need this?
-    height_scanner = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/pelvis",
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-        attach_yaw_only=True,
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
-        debug_vis=True,
-        mesh_prim_paths=["/World/ground"],
-    )
+    # contact sensors
     contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
 
     # lights
@@ -69,17 +60,12 @@ class MySceneCfg(InteractiveSceneCfg):
 ##
 
 
-@configclass
-class CommandsCfg:
-    """Command specifications for the MDP."""
-    # TODO
+# Wrapper for the partial joint position & velocity function
+def bodytrack_joint_pos_rel(env):
+    return mdp.partial_joint_pos_rel(env, joint_names=bodytrack_joint_names)
 
-
-@configclass
-class ActionsCfg:
-    """Action specifications for the MDP."""
-
-    joint_pos = mdp.JointPositionActionCfg(asset_name="robot", joint_names=[".*"], scale=0.5, use_default_offset=True)
+def bodytrack_joint_vel_rel(env):
+    return mdp.partial_joint_vel_rel(env, joint_names=bodytrack_joint_names)
 
 
 @configclass
@@ -97,15 +83,19 @@ class ObservationsCfg:
             func=mdp.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
         )
-        # FIXME(OKJ): footstep -> bodytrack
-        footstep_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "footstep"})
-        joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
-        joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))
-        actions = ObsTerm(func=mdp.last_action)
+        partial_joint_pos = ObsTerm(
+            func=bodytrack_joint_pos_rel,
+            noise=Unoise(n_min=-0.01, n_max=0.01),
+        )
+        partial_joint_vel = ObsTerm(
+            func=bodytrack_joint_vel_rel,
+            noise=Unoise(n_min=-1.5, n_max=1.5),
+        )
+        actions = ObsTerm(func=mdp.last_action, params={"action_name": "joint_pos"}, noise=Unoise(n_min=-0.01, n_max=0.01))
+        hand_reach_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "hand_reach"})
 
         def __post_init__(self):
             self.enable_corruption = False
-            # NOTE(OKJ): I'm not going to use obs noise at first, but it can be useful later
             self.concatenate_terms = True
 
     # observation groups
@@ -113,15 +103,44 @@ class ObservationsCfg:
 
 
 @configclass
-class EventCfg:
-    """Configuration for events."""
+class ActionsCfg:
+    """Action specifications for the MDP."""
 
-    reset_base = EventTerm(
-        func=mdp.reset_root_state_uniform,
-        mode="reset",
-        params={"pose_range": {}, "velocity_range": {}},
+    joint_pos = mdp.JointPositionActionCfg(asset_name="robot", joint_names=bodytrack_joint_names, scale=0.5, use_default_offset=True)
+    fix_joint_pos = mdp.FixJointPositionActionCfg(asset_name="robot", joint_names=non_bodytrack_joint_names, use_default_offset=True)
+
+
+@configclass
+class CommandsCfg:
+    """Command specifications for the MDP."""
+
+    hand_reach = mdp.BodyTrackCommandCfg(
+        asset_name="robot",
+        target_hand_name="right_rubber_hand",
+        # FIXME(OKJ): Does resampling multiple times in a single episode is better?
+        resampling_time_range=(5.0, 5.0), # avoid resampling during the episode
+        debug_vis= True,
     )
 
+
+@configclass
+class RewardsCfg:
+    """Reward terms for the MDP."""
+    
+    # task reward
+    hand_reach = RewTerm(func=mdp.hand_reach_reward, weight=1.0, params={"command_name": "hand_reach"})
+    
+    # regularization
+    action_acc_l2 = RewTerm(func=mdp.action_acc_l2, weight=-0.01)
+    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+    collision_penalty = RewTerm(func=mdp.collision_penalty, weight=-5.0)
+    default_joint_error = RewTerm(func=mdp.default_joint_error, weight=0.2)
+
+
+@configclass
+class EventCfg:
+    """Configuration for events."""
+    
     reset_robot_joints = EventTerm(
         func=mdp.reset_joints_by_offset,
         mode="reset",
@@ -130,60 +149,14 @@ class EventCfg:
             "velocity_range": (-0.1, 0.1),
         },
     )
-    
-    # NOTE(OKJ): I'm not going to use DR event at first, but it can be useful later
-
-
-@configclass
-class RewardsCfg:
-    """Reward terms for the MDP."""
-    
-    # default
-    alive = RewTerm(
-        func=mdp.is_alive,
-        weight=1.0,
-    )
-    termination_penalty = RewTerm(
-        func=mdp.is_terminated_term,
-        weight=-50.0,
-        params={"term_keys": ["pelvis_height_below_minimum", "pelvis_bad_ori"]},
-    )
-    
-    # regularization
-    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    dof_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-5)
-    dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
-    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
-    
-    # penalty
-    feet_slide = RewTerm(
-        func=mdp.feet_slide,
-        weight=-0.1,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_ankle_roll_link"),
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*_ankle_roll_link"),
-        },
-    )
-    
-    # NOTE(OKJ): do we need this?
-    # undesired_contacts = RewTerm(
-    #     func=mdp.undesired_contacts,
-    #     weight=-1.0,
-    #     params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*THIGH"), "threshold": 1.0},
-    # )
 
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
 
-    # (1) Terminate if the episode length is exceeded
+    # NOTE: Since the root is fixed, we don't need to check for other termination.
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    # (2) Terminate if the robot falls
-    pelvis_height_below_minimum = DoneTerm(func=mdp.root_height_below_minimum, params={"minimum_height": 0.3})
-    # (3) Terminate if the pelvis orientation is bad
-    pelvis_bad_ori = DoneTerm(func=mdp.pelvis_bad_ori, params={"limit_euler_angle": [0.9, 1.0]})
 
 
 ##
@@ -210,7 +183,7 @@ class G1BodyTrackEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 4
-        self.episode_length_s = 20.0
+        self.episode_length_s = 5.0
         # simulation settings
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation

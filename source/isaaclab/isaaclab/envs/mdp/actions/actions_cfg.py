@@ -34,6 +34,24 @@ class JointActionCfg(ActionTermCfg):
 
 
 @configclass
+class FixJointPositionActionCfg(JointActionCfg):
+    """Configuration for the fixed joint position action term.
+
+    See :class:`FixJointPositionAction` for more details.
+    """
+
+    class_type: type[ActionTerm] = joint_actions.FixJointPositionAction
+
+    use_default_offset: bool = True
+    """Whether to use default joint positions configured in the articulation asset as offset.
+    Defaults to True.
+
+    If True, this flag results in overwriting the values of :attr:`offset` to the default joint positions
+    from the articulation asset.
+    """
+
+
+@configclass
 class JointPositionActionCfg(JointActionCfg):
     """Configuration for the joint position action term.
 
