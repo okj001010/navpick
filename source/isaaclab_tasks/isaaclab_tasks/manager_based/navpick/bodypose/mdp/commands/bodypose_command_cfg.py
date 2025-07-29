@@ -12,14 +12,14 @@ from isaaclab.markers import VisualizationMarkersCfg
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.utils import configclass
 
-from .bodytrack_command import BodyTrackCommand
+from .bodypose_command import BodyPoseCommand
 
 
 @configclass
-class BodyTrackCommandCfg(CommandTermCfg):
+class BodyPoseCommandCfg(CommandTermCfg):
     """Configuration for the uniform root xy position command generator."""
 
-    class_type: type = BodyTrackCommand
+    class_type: type = BodyPoseCommand
 
     asset_name: str = MISSING
     """Name of the asset in the environment for which the commands are generated."""

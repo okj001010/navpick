@@ -5,7 +5,7 @@
 
 """Various goal-conditioned command terms that can be used in the environment."""
 
-from .bodytrack_command_cfg import (
-    BodyTrackCommandCfg,
+from .bodypose_command_cfg import (
+    BodyPoseCommandCfg,
 )
-from .bodytrack_command import BodyTrackCommand
+from .bodypose_command import BodyPoseCommand

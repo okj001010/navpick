@@ -19,16 +19,16 @@ from isaaclab.markers import VisualizationMarkers
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
-    from .bodytrack_command_cfg import BodyTrackCommandCfg
+    from .bodypose_command_cfg import BodyPoseCommandCfg
 
 
-class BodyTrackCommand(CommandTerm):
+class BodyPoseCommand(CommandTerm):
     """Command generator for hand reach commands."""
 
-    cfg: BodyTrackCommandCfg
+    cfg: BodyPoseCommandCfg
     """Configuration for the command generator."""
 
-    def __init__(self, cfg: BodyTrackCommandCfg, env: ManagerBasedRLEnv):
+    def __init__(self, cfg: BodyPoseCommandCfg, env: ManagerBasedRLEnv):
         """Initialize the command generator class.
 
         Args:

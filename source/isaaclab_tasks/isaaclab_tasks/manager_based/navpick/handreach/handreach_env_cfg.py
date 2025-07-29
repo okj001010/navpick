@@ -106,8 +106,18 @@ class ObservationsCfg:
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_pos = mdp.JointPositionActionCfg(asset_name="robot", joint_names=handreach_joint_names, scale=0.5, use_default_offset=True)
-    fix_joint_pos = mdp.FixJointPositionActionCfg(asset_name="robot", joint_names=non_handreach_joint_names, use_default_offset=True)
+    joint_pos = mdp.JointPositionActionCfg(
+        asset_name="robot",
+        joint_names=handreach_joint_names,
+        scale=0.5,
+        clip={".*": (-1.0, 1.0)},
+        use_default_offset=True
+    )
+    fix_joint_pos = mdp.FixJointPositionActionCfg(
+        asset_name="robot",
+        joint_names=non_handreach_joint_names,
+        use_default_offset=True
+    )
 
 
 @configclass

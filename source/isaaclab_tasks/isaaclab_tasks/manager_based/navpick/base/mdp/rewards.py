@@ -12,8 +12,9 @@ specify the reward function and its parameters.
 from __future__ import annotations
 
 import torch
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, List
 
+from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import ContactSensor
 
@@ -42,17 +43,22 @@ def collision_penalty(
 
 def default_joint_error(
     env: ManagerBasedRLEnv,
-    joint_names: list[str] = None,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    joint_names: Optional[List[str]] = None
 ) -> torch.Tensor:
     """Penalize the joint position error from the default position."""
-    asset = env.scene[asset_cfg.name]
-    joint_pos = asset.data.joint_pos
-    default_joint_pos = asset.data.default_joint_pos
+    asset: Articulation = env.scene[asset_cfg.name]
+    
     if joint_names is not None:
-        joint_pos = joint_pos[joint_names]
-        default_joint_pos = default_joint_pos[joint_names]
+        name_to_index = {name: idx for idx, name in enumerate(asset.joint_names)}
+        try:
+            joint_ids = [name_to_index[name] for name in joint_names]
+        except KeyError as e:
+            raise ValueError(f"joint name {e} not found in asset.joint_names") from e
+    else:
+        joint_ids = asset_cfg.joint_ids
+
     return torch.sum(
-        torch.exp(-2 * torch.square(joint_pos - default_joint_pos)),
+        torch.exp(-2 * torch.square(asset.data.joint_pos[:, joint_ids] - asset.data.default_joint_pos[:, joint_ids])),
         dim=1,
     )

@@ -21,8 +21,8 @@ from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 from . import mdp
-from . import bodytrack_joint_names, non_bodytrack_joint_names
-from ..base.g1_spawn_info import G1_CFG
+from . import bodypose_joint_names, non_bodypose_joint_names
+from ..base.g1_spawn_info import G1_FIXED_CFG
 
 ##
 # Scene definition
@@ -61,11 +61,11 @@ class MySceneCfg(InteractiveSceneCfg):
 
 
 # Wrapper for the partial joint position & velocity function
-def bodytrack_joint_pos_rel(env):
-    return mdp.partial_joint_pos_rel(env, joint_names=bodytrack_joint_names)
+def bodypose_joint_pos_rel(env):
+    return mdp.partial_joint_pos_rel(env, joint_names=bodypose_joint_names)
 
-def bodytrack_joint_vel_rel(env):
-    return mdp.partial_joint_vel_rel(env, joint_names=bodytrack_joint_names)
+def bodypose_joint_vel_rel(env):
+    return mdp.partial_joint_vel_rel(env, joint_names=bodypose_joint_names)
 
 
 @configclass
@@ -84,15 +84,15 @@ class ObservationsCfg:
             noise=Unoise(n_min=-0.05, n_max=0.05),
         )
         partial_joint_pos = ObsTerm(
-            func=bodytrack_joint_pos_rel,
+            func=bodypose_joint_pos_rel,
             noise=Unoise(n_min=-0.01, n_max=0.01),
         )
         partial_joint_vel = ObsTerm(
-            func=bodytrack_joint_vel_rel,
+            func=bodypose_joint_vel_rel,
             noise=Unoise(n_min=-1.5, n_max=1.5),
         )
         actions = ObsTerm(func=mdp.last_action, params={"action_name": "joint_pos"}, noise=Unoise(n_min=-0.01, n_max=0.01))
-        hand_reach_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "hand_reach"})
+        body_pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "body_pose"})
 
         def __post_init__(self):
             self.enable_corruption = False
@@ -106,17 +106,16 @@ class ObservationsCfg:
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_pos = mdp.JointPositionActionCfg(asset_name="robot", joint_names=bodytrack_joint_names, scale=0.5, use_default_offset=True)
-    fix_joint_pos = mdp.FixJointPositionActionCfg(asset_name="robot", joint_names=non_bodytrack_joint_names, use_default_offset=True)
+    joint_pos = mdp.JointPositionActionCfg(asset_name="robot", joint_names=bodypose_joint_names, scale=0.5, use_default_offset=True)
+    fix_joint_pos = mdp.FixJointPositionActionCfg(asset_name="robot", joint_names=non_bodypose_joint_names, use_default_offset=True)
 
 
 @configclass
 class CommandsCfg:
     """Command specifications for the MDP."""
 
-    hand_reach = mdp.BodyTrackCommandCfg(
+    body_pose = mdp.BodyPoseCommandCfg(
         asset_name="robot",
-        target_hand_name="right_rubber_hand",
         # FIXME(OKJ): Does resampling multiple times in a single episode is better?
         resampling_time_range=(5.0, 5.0), # avoid resampling during the episode
         debug_vis= True,
@@ -128,13 +127,13 @@ class RewardsCfg:
     """Reward terms for the MDP."""
     
     # task reward
-    hand_reach = RewTerm(func=mdp.hand_reach_reward, weight=1.0, params={"command_name": "hand_reach"})
-    
+    body_pose = RewTerm(func=mdp.body_pose_reward, weight=1.0, params={"command_name": "body_pose"})
+
     # regularization
     action_acc_l2 = RewTerm(func=mdp.action_acc_l2, weight=-0.01)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
     collision_penalty = RewTerm(func=mdp.collision_penalty, weight=-5.0)
-    default_joint_error = RewTerm(func=mdp.default_joint_error, weight=0.2)
+    default_joint_error = RewTerm(func=mdp.default_joint_error, weight=0.2, params={"joint_names": bodypose_joint_names})
 
 
 @configclass
@@ -165,7 +164,7 @@ class TerminationsCfg:
 
 
 @configclass
-class G1BodyTrackEnvCfg(ManagerBasedRLEnvCfg):
+class G1BodyPoseEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the goal conditioned locomotion environment."""
 
     # Scene settings
@@ -196,13 +195,13 @@ class G1BodyTrackEnvCfg(ManagerBasedRLEnvCfg):
             self.scene.contact_forces.update_period = self.sim.dt
         
         # Scene
-        self.scene.robot = G1_CFG.replace(
+        self.scene.robot = G1_FIXED_CFG.replace(
             prim_path="{ENV_REGEX_NS}/Robot",
         )
 
 
 @configclass
-class G1BodyTrackEnvCfgPlay(G1BodyTrackEnvCfg):
+class G1BodyPoseEnvCfgPlay(G1BodyPoseEnvCfg):
     def __post_init__(self) -> None:
         # post init of parent
         super().__post_init__()

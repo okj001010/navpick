@@ -6,5 +6,5 @@
 """NavPick environments"""
 
 from .locomotion import *  # noqa
-from .bodytrack import *  # noqa
+from .bodypose import *  # noqa
 from .handreach import *  # noqa

@@ -10,8 +10,8 @@ from ...base.agents.rsl_rl_ppo_cfg import G1BasePPORunnerCfg
 
 
 @configclass
-class G1BodyTrackPPORunnerCfg(G1BasePPORunnerCfg):
+class G1BodyPosePPORunnerCfg(G1BasePPORunnerCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        self.experiment_name = "g1_bodytrack"
+        self.experiment_name = "g1_bodypose"

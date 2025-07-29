@@ -14,18 +14,18 @@ from __future__ import annotations
 import torch
 from typing import TYPE_CHECKING, cast
 
-from .commands.bodytrack_command import BodyTrackCommand
+from .commands.bodypose_command import BodyPoseCommand
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
 # FIXME(OKJ): track body command
-def hand_reach_reward(
+def body_pose_reward(
     env: ManagerBasedRLEnv,
-    command_name: str = "hand_reach",
+    command_name: str = "body_pose",
 ) -> torch.Tensor:
-    """Reward for reaching the hand to the target."""
-    command = cast(BodyTrackCommand, env.command_manager.get_term(command_name))
+    """Reward for body-pose adjustment."""
+    command = cast(BodyPoseCommand, env.command_manager.get_term(command_name))
     curr_hand_pose, goal_hand_pose = command.current_and_goal_hand_poses
     return torch.exp(-4.0 * torch.square(curr_hand_pose - goal_hand_pose).sum(dim=-1))
