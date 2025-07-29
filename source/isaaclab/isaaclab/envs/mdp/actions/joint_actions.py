@@ -151,6 +151,11 @@ class FixJointPositionAction(JointAction):
 
     cfg: actions_cfg.FixJointPositionActionCfg
     """The configuration of the action term."""
+    
+    @property
+    def action_dim(self) -> int:
+        # fixed joint position action is considered as a zero-dimensional action
+        return 0
 
     def apply_actions(self):
         # set position targets to default joint positions

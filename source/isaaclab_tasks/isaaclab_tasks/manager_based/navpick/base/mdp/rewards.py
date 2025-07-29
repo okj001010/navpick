@@ -42,12 +42,16 @@ def collision_penalty(
 
 def default_joint_error(
     env: ManagerBasedRLEnv,
+    joint_names: list[str] = None,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> torch.Tensor:
     """Penalize the joint position error from the default position."""
     asset = env.scene[asset_cfg.name]
     joint_pos = asset.data.joint_pos
     default_joint_pos = asset.data.default_joint_pos
+    if joint_names is not None:
+        joint_pos = joint_pos[joint_names]
+        default_joint_pos = default_joint_pos[joint_names]
     return torch.sum(
         torch.exp(-2 * torch.square(joint_pos - default_joint_pos)),
         dim=1,

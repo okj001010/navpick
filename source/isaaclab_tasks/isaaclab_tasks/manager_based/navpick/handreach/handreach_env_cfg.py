@@ -134,7 +134,7 @@ class RewardsCfg:
     action_acc_l2 = RewTerm(func=mdp.action_acc_l2, weight=-0.01)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
     collision_penalty = RewTerm(func=mdp.collision_penalty, weight=-5.0)
-    default_joint_error = RewTerm(func=mdp.default_joint_error, weight=0.2)
+    default_joint_error = RewTerm(func=mdp.default_joint_error, weight=0.2, params={"joint_names": handreach_joint_names})
 
 
 @configclass
