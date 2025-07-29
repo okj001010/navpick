@@ -143,8 +143,16 @@ class RewardsCfg:
     # regularization
     action_acc_l2 = RewTerm(func=mdp.action_acc_l2, weight=-0.01)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
-    collision_penalty = RewTerm(func=mdp.collision_penalty, weight=-5.0)
-    default_joint_error = RewTerm(func=mdp.default_joint_error, weight=0.2, params={"joint_names": handreach_joint_names})
+    collision_penalty = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-5.0,
+        params={
+            # consider only self collisions (not ground)
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="^(?!.*_ankle_roll_link$).*"),
+            "threshold": 1.0,
+        }
+    )
+    # default_joint_error = RewTerm(func=mdp.default_joint_error, weight=0.2, params={"joint_names": handreach_joint_names})
 
 
 @configclass

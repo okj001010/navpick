@@ -22,7 +22,7 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 from . import mdp
 from . import bodypose_joint_names, non_bodypose_joint_names
-from ..base.g1_spawn_info import G1_FIXED_CFG
+from ..base.g1_spawn_info import G1_CFG
 
 ##
 # Scene definition
@@ -116,6 +116,10 @@ class CommandsCfg:
 
     body_pose = mdp.BodyPoseCommandCfg(
         asset_name="robot",
+        ranges=mdp.BodyPoseCommandCfg.Ranges(
+            base_height=(0.3, 0.75),
+            hip_pitch=(-60.0, 0.0), # front hip pitch (in degrees)
+        ),
         # FIXME(OKJ): Does resampling multiple times in a single episode is better?
         resampling_time_range=(5.0, 5.0), # avoid resampling during the episode
         debug_vis= True,
@@ -128,11 +132,31 @@ class RewardsCfg:
     
     # task reward
     body_pose = RewTerm(func=mdp.body_pose_reward, weight=1.0, params={"command_name": "body_pose"})
+    
+    # behavioral rewards
+    waist_roll_error = RewTerm(func=mdp.waist_roll_error, weight=1.0)
+    leg_pos_symmetry = RewTerm(func=mdp.leg_pos_symmetry, weight=0.5)
+    contact_ground = RewTerm(
+        func=mdp.contact_ground,
+        weight=1.0,
+        params={
+            # consider only ground contacts
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_ankle_roll_link$"),
+        }
+    )
 
     # regularization
     action_acc_l2 = RewTerm(func=mdp.action_acc_l2, weight=-0.01)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
-    collision_penalty = RewTerm(func=mdp.collision_penalty, weight=-5.0)
+    collision_penalty = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-5.0,
+        params={
+            # consider only self collisions (not ground)
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="^(?!.*_ankle_roll_link$).*"),
+            "threshold": 1.0,
+        }
+    )
     default_joint_error = RewTerm(func=mdp.default_joint_error, weight=0.2, params={"joint_names": bodypose_joint_names})
 
 
@@ -154,8 +178,8 @@ class EventCfg:
 class TerminationsCfg:
     """Termination terms for the MDP."""
 
-    # NOTE: Since the root is fixed, we don't need to check for other termination.
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
+    pelvis_below_minimum = DoneTerm(func=mdp.pelvis_below_minimum, params={"minimum_height": 0.2})
 
 
 ##
@@ -195,7 +219,7 @@ class G1BodyPoseEnvCfg(ManagerBasedRLEnvCfg):
             self.scene.contact_forces.update_period = self.sim.dt
         
         # Scene
-        self.scene.robot = G1_FIXED_CFG.replace(
+        self.scene.robot = G1_CFG.replace(
             prim_path="{ENV_REGEX_NS}/Robot",
         )
 

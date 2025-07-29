@@ -22,7 +22,23 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
-def pelvis_bad_ori(
+def pelvis_below_minimum(
+    env: ManagerBasedRLEnv,
+    minimum_height: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Terminate when the asset's root height is below the minimum height.
+
+    Note:
+        This is currently only supported for flat terrains, i.e. the minimum height is in the world frame.
+    """
+    asset: Articulation = env.scene[asset_cfg.name]
+    is_below = asset.data.root_pos_w[:, 2] < minimum_height
+    return is_below
+
+
+# NOTE(OKJ): I think pelvis_below_minimum is more softer than bad_pelvis_ori, so we can use it as a termination.
+def bad_pelvis_ori(
     env: ManagerBasedRLEnv,
     limit_euler_angle: list[float] = [0.5, 1.5],
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),

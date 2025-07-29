@@ -9,7 +9,7 @@ from dataclasses import MISSING
 import isaaclab.sim as sim_utils
 from isaaclab.managers import CommandTermCfg
 from isaaclab.markers import VisualizationMarkersCfg
-from isaaclab.markers.config import FRAME_MARKER_CFG
+from isaaclab.markers.config import RED_ARROW_X_MARKER_CFG, GREEN_ARROW_X_MARKER_CFG
 from isaaclab.utils import configclass
 
 from .bodypose_command import BodyPoseCommand
@@ -23,27 +23,53 @@ class BodyPoseCommandCfg(CommandTermCfg):
 
     asset_name: str = MISSING
     """Name of the asset in the environment for which the commands are generated."""
-    
-    target_hand_name: str = MISSING
-    torso_body_name: str = "torso_link"
 
-    shoulder_offset: list[float] = [0.0039563, -0.10021, 0.24778]
+    left_hip_pitch_joint: str = "left_hip_pitch_joint"
+    right_hip_pitch_joint: str = "right_hip_pitch_joint"
 
-    goal_hand_pose_visualizer_cfg: VisualizationMarkersCfg = FRAME_MARKER_CFG.replace(
-        prim_path="/Visuals/Command/goal_hand_pose"
-    )
-    current_hand_pose_visualizer_cfg: VisualizationMarkersCfg = FRAME_MARKER_CFG.replace(
-        prim_path="/Visuals/Command/current_hand_pose"
-    )
-    goal_hand_pose_visualizer_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
-    current_hand_pose_visualizer_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
+    @configclass
+    class Ranges:
+        """
+        Ranges for the body pose (base height and hip pitch) commands.
+        """
 
-    shoulder_pos_visualizer_cfg = VisualizationMarkersCfg(
-        prim_path="/Visuals/Command/shoulder_pos",
+        base_height: tuple[float, float] = MISSING
+        hip_pitch: tuple[float, float] = MISSING
+
+    ranges: Ranges = MISSING
+
+    # TODO(OKJ): visualization for debugging
+    goal_base_visualizer_cfg = VisualizationMarkersCfg(
+        prim_path="/Visuals/Command/goal_base_height",
         markers={
             "sphere": sim_utils.SphereCfg(
-                radius=0.01,
+                radius=0.03,
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
             ),
         }
     )
+    current_base_visualizer_cfg = VisualizationMarkersCfg(
+        prim_path="/Visuals/Command/current_base_height",
+        markers={
+            "sphere": sim_utils.SphereCfg(
+                radius=0.03,
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)),
+            ),
+        }
+    )
+    goal_left_hip_pitch_visualizer_cfg: VisualizationMarkersCfg = RED_ARROW_X_MARKER_CFG.replace(
+        prim_path="/Visuals/Command/goal_left_hip_pitch"
+    )
+    goal_right_hip_pitch_visualizer_cfg: VisualizationMarkersCfg = RED_ARROW_X_MARKER_CFG.replace(
+        prim_path="/Visuals/Command/goal_right_hip_pitch"
+    )
+    current_left_hip_pitch_visualizer_cfg: VisualizationMarkersCfg = GREEN_ARROW_X_MARKER_CFG.replace(
+        prim_path="/Visuals/Command/current_left_hip_pitch",
+    )
+    current_right_hip_pitch_visualizer_cfg: VisualizationMarkersCfg = GREEN_ARROW_X_MARKER_CFG.replace(
+        prim_path="/Visuals/Command/current_right_hip_pitch"
+    )
+    goal_left_hip_pitch_visualizer_cfg.markers["arrow"].scale = (0.1, 0.1, 0.1)
+    goal_right_hip_pitch_visualizer_cfg.markers["arrow"].scale = (0.1, 0.1, 0.1)
+    current_left_hip_pitch_visualizer_cfg.markers["arrow"].scale = (0.1, 0.1, 0.1)
+    current_right_hip_pitch_visualizer_cfg.markers["arrow"].scale = (0.1, 0.1, 0.1)

@@ -107,7 +107,7 @@ class HandReachCommand(CommandTerm):
     def _update_metrics(self):
         curr_hand_pose, goal_hand_pose = self.current_and_goal_hand_poses
         self.metrics["error_hand_pos"] += torch.norm(curr_hand_pose[:, :3] - goal_hand_pose[:, :3], dim=-1)
-        self.metrics["error_hand_rot"] += torch.norm(curr_hand_pose[:, 3:6] - goal_hand_pose[:, 3:6], dim=-1)
+        self.metrics["error_hand_rot"] += torch.norm(math_utils.wrap_to_pi(curr_hand_pose[:, 3:6] - goal_hand_pose[:, 3:6]), dim=-1)
 
     def _resample_command(self, env_ids: Sequence[int]):
         """Resample the command for the given environment IDs."""

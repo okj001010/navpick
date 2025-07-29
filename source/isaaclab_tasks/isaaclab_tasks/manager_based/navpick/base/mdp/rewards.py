@@ -29,16 +29,16 @@ def action_acc_l2(env: ManagerBasedRLEnv) -> torch.Tensor:
         dim=1,
     )
 
-def collision_penalty(
-    env: ManagerBasedRLEnv,
-    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
-    force_threshold: float = 0.1,
-) -> torch.Tensor:
-    """Penalize collisions with the environment."""
-    # FIXME(OKJ): remove ankle roll pitch and ground plane contact
-    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
-    contacts = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0] > force_threshold
-    return contacts
+# def collision_penalty(
+#     env: ManagerBasedRLEnv,
+#     sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
+#     force_threshold: float = 0.1,
+# ) -> torch.Tensor:
+#     """Penalize collisions with the environment."""
+#     # FIXME(OKJ): remove ankle roll pitch and ground plane contact
+#     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+#     contacts = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0] > force_threshold
+#     return contacts
 
 
 def default_joint_error(

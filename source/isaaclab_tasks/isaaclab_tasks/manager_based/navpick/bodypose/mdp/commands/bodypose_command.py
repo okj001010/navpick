@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 class BodyPoseCommand(CommandTerm):
-    """Command generator for hand reach commands."""
+    """Command generator for body pose commands."""
 
     cfg: BodyPoseCommandCfg
     """Configuration for the command generator."""
@@ -40,21 +40,35 @@ class BodyPoseCommand(CommandTerm):
 
         self.env = env
         self.robot: Articulation = env.scene[cfg.asset_name]
-        
-        # find the body indices
-        self.target_hand_idx = self.robot.find_bodies(cfg.target_hand_name)[0][0]
-        self.torso_idx = self.robot.find_bodies(cfg.torso_body_name)[0][0]
-        
+
+        # initialize the command sampler
+        self.init_command_sampler(self.cfg.ranges)
+
+        # find the joint indices
+        self.left_hip_pitch = self.robot.find_joints(cfg.left_hip_pitch_joint)[0][0]
+        self.right_hip_pitch = self.robot.find_joints(cfg.right_hip_pitch_joint)[0][0]
+
         # create buffers to store the command
-        self.goal_hand_pose_b = torch.zeros((env.num_envs, 7), device=env.device)
-        self.goal_hand_pose_w = torch.zeros((env.num_envs, 7), device=env.device)
-        self.curr_hand_pose_b = torch.zeros((env.num_envs, 7), device=env.device)
-        self.curr_hand_pose_w = torch.zeros((env.num_envs, 7), device=env.device)
-        self.shoulder_pos_w = torch.zeros((env.num_envs, 3), device=env.device)
+        self.goal_base_height = torch.zeros((self.env.num_envs,), dtype=torch.float32, device=self.env.device)
+        self.goal_hip_pitch = torch.zeros((self.env.num_envs,), dtype=torch.float32, device=self.env.device)
         
         # metrics
-        self.metrics["error_hand_pos"] = torch.zeros((env.num_envs,), device=env.device)
-        self.metrics["error_hand_rot"] = torch.zeros((env.num_envs,), device=env.device)
+        self.metrics["error_base_height"] = torch.zeros((env.num_envs,), device=env.device)
+        self.metrics["error_hip_pitch"] = torch.zeros((env.num_envs,), device=env.device)
+    
+    """
+    Helper functions
+    """
+    def init_command_sampler(self, ranges: BodyPoseCommandCfg.Ranges):
+        self.base_height_sampler = torch.distributions.Uniform(
+            low=torch.tensor(ranges.base_height[0], device=self.env.device),
+            high=torch.tensor(ranges.base_height[1], device=self.env.device),
+        )
+        self.hip_pitch_sampler = torch.distributions.Uniform(
+            low=torch.tensor(ranges.hip_pitch[0], device=self.env.device),
+            high=torch.tensor(ranges.hip_pitch[1], device=self.env.device),
+        )
+
 
     """
     Properties
@@ -62,28 +76,8 @@ class BodyPoseCommand(CommandTerm):
 
     @property
     def command(self) -> torch.Tensor:
-        """The desired hand pose command in the base frame. Shape is (num_envs, 6)."""
-        return torch.cat((
-            self.goal_hand_pose_b[:, :3],
-            math_utils.axis_angle_from_quat(self.goal_hand_pose_b[:, 3:7])
-        ), dim=-1)
-    
-    @property
-    # return curr_hand_pose, goal_hand_pose in the base frame
-    def current_and_goal_hand_poses(self) -> tuple[torch.Tensor, torch.Tensor]:
-        """Compute the current and goal hand poses."""
-        curr_hand_pos, curr_hand_ori = math_utils.subtract_frame_transforms(
-            self.robot.data.root_state_w[..., :3],
-            self.robot.data.root_state_w[..., 3:7],
-            self.robot.data.body_state_w[:, self.target_hand_idx, :3],
-            self.robot.data.body_state_w[:, self.target_hand_idx, 3:7],
-        )
-        curr_hand_pose = torch.cat((
-            curr_hand_pos,
-            math_utils.axis_angle_from_quat(curr_hand_ori)
-        ), dim=-1)
-        goal_hand_pose = self.command
-        return curr_hand_pose, goal_hand_pose   # (N, 6), (N, 6)
+        """The desired body pose (base height and hip pitch) command. Shape is (num_envs, 2)."""
+        return torch.stack((self.goal_base_height, self.goal_hip_pitch), dim=-1)
 
 
     """
@@ -105,43 +99,15 @@ class BodyPoseCommand(CommandTerm):
     """
 
     def _update_metrics(self):
-        curr_hand_pose, goal_hand_pose = self.current_and_goal_hand_poses
-        self.metrics["error_hand_pos"] += torch.norm(curr_hand_pose[:, :3] - goal_hand_pose[:, :3], dim=-1)
-        self.metrics["error_hand_rot"] += torch.norm(curr_hand_pose[:, 3:6] - goal_hand_pose[:, 3:6], dim=-1)
+        self.metrics["error_base_height"] += torch.abs(self.robot.data.root_state_w[:, 2] - self.goal_base_height)
+        left_hip_pitch_error = torch.abs(self.robot.data.joint_pos[:, self.left_hip_pitch] - self.goal_hip_pitch)
+        right_hip_pitch_error = torch.abs(self.robot.data.joint_pos[:, self.right_hip_pitch] - self.goal_hip_pitch)
+        self.metrics["error_hip_pitch"] += left_hip_pitch_error + right_hip_pitch_error
 
     def _resample_command(self, env_ids: Sequence[int]):
         """Resample the command for the given environment IDs."""
-        # get the current shoulder position
-        self.torso_pos_w = self.robot.data.body_state_w[env_ids, self.torso_idx, :3]
-        shoulder_offset = torch.tensor(self.cfg.shoulder_offset, device=self.env.device).unsqueeze(0)
-        self.shoulder_pos_w[env_ids, :3] = self.torso_pos_w + shoulder_offset
-
-        # FIXME(OKJ): we need to sample a random goal in dexterous workspace
-        # for now, we just sample a random goal within a hemisphere around the shoulder
-        # sample a random goal within a hemisphere around the shoulder
-        theta = -torch.rand((self.env.num_envs,), device=self.env.device) * math.pi
-        phi = torch.rand((self.env.num_envs,), device=self.env.device) * math.pi
-        radius = torch.rand((self.env.num_envs,), device=self.env.device) * 0.2 + 0.2 # radius between 0.2 and 0.4
-        goal_pos = radius.unsqueeze(-1) * torch.stack((
-            torch.sin(theta) * torch.cos(phi),
-            torch.sin(theta) * torch.sin(phi),
-            torch.cos(theta)
-        ), dim=-1)
-        self.goal_hand_pose_w[env_ids, :3] = self.shoulder_pos_w[env_ids] + goal_pos
-        
-        rpy = torch.rand((self.env.num_envs, 3), device=self.env.device) * math.pi - math.pi / 2
-        goal_ori = math_utils.quat_from_euler_xyz(rpy[:, 0], rpy[:, 1], rpy[:, 2])
-        self.goal_hand_pose_w[env_ids, 3:7] = goal_ori
-
-        # transform the goal hand pose to the base frame
-        goal_hand_pos, goal_hand_quat = math_utils.subtract_frame_transforms(
-            self.goal_hand_pose_w[env_ids, :3],
-            self.goal_hand_pose_w[env_ids, 3:7],
-            self.robot.data.root_state_w[env_ids, :3],
-            self.robot.data.root_state_w[env_ids, 3:7],
-        )
-        self.goal_hand_pose_b[env_ids, :3] = goal_hand_pos
-        self.goal_hand_pose_b[env_ids, 3:7] = goal_hand_quat
+        self.goal_base_height[env_ids] = self.base_height_sampler.sample((len(env_ids), 1))
+        self.goal_hip_pitch[env_ids] = self.hip_pitch_sampler.sample((len(env_ids), 1))
 
     def _update_command(self):
         pass
@@ -149,34 +115,62 @@ class BodyPoseCommand(CommandTerm):
     def _set_debug_vis_impl(self, debug_vis: bool) -> None:
         """Set debug visualization implementation."""
         if debug_vis:
-            if not hasattr(self, "goal_hand_pose_visualizer"):
-                self.goal_hand_pose_visualizer = VisualizationMarkers(self.cfg.goal_hand_pose_visualizer_cfg)
-                self.current_hand_pose_visualizer = VisualizationMarkers(self.cfg.current_hand_pose_visualizer_cfg)
-                self.shoulder_pos_visualizer = VisualizationMarkers(self.cfg.shoulder_pos_visualizer_cfg)
+            if not hasattr(self, "goal_base_visualizer"):
+                self.goal_base_visualizer = VisualizationMarkers(self.cfg.goal_base_visualizer_cfg)
+                self.current_base_visualizer = VisualizationMarkers(self.cfg.current_base_visualizer_cfg)
+                self.goal_left_hip_pitch_visualizer = VisualizationMarkers(self.cfg.goal_left_hip_pitch_visualizer_cfg)
+                self.goal_right_hip_pitch_visualizer = VisualizationMarkers(self.cfg.goal_right_hip_pitch_visualizer_cfg)
+                self.current_left_hip_pitch_visualizer = VisualizationMarkers(self.cfg.current_left_hip_pitch_visualizer_cfg)
+                self.current_right_hip_pitch_visualizer = VisualizationMarkers(self.cfg.current_right_hip_pitch_visualizer_cfg)
             # set their visibility to true
-            self.goal_hand_pose_visualizer.set_visibility(True)
-            self.current_hand_pose_visualizer.set_visibility(True)
-            self.shoulder_pos_visualizer.set_visibility(True)
+            self.goal_base_visualizer.set_visibility(True)
+            self.current_base_visualizer.set_visibility(True)
+            self.goal_left_hip_pitch_visualizer.set_visibility(True)
+            self.goal_right_hip_pitch_visualizer.set_visibility(True)
+            self.current_left_hip_pitch_visualizer.set_visibility(True)
+            self.current_right_hip_pitch_visualizer.set_visibility(True)
         else:
-            if hasattr(self, "goal_hand_pose_visualizer"):
-                self.goal_hand_pose_visualizer.set_visibility(False)
-                self.current_hand_pose_visualizer.set_visibility(False)
-                self.shoulder_pos_visualizer.set_visibility(False)
-    
+            if hasattr(self, "goal_base_visualizer"):
+                self.goal_base_visualizer.set_visibility(False)
+                self.current_base_visualizer.set_visibility(False)
+                self.goal_left_hip_pitch_visualizer.set_visibility(False)
+                self.goal_right_hip_pitch_visualizer.set_visibility(False)
+                self.current_left_hip_pitch_visualizer.set_visibility(False)
+                self.current_right_hip_pitch_visualizer.set_visibility(False)
+
     def _debug_vis_callback(self, event):
         """Debug visualization callback."""
         if not self.robot.is_initialized:
             return
         
-        # visualize the goal hand pose
-        goal_hand_pos = self.goal_hand_pose_w[:, :3]
-        goal_hand_ori = self.goal_hand_pose_w[:, 3:7]
-        self.goal_hand_pose_visualizer.visualize(goal_hand_pos, goal_hand_ori)
+        # visualize the goal base height
+        goal_base_pos = self.robot.data.root_state_w[:, :3].clone()
+        goal_base_pos[:, 2] = self.goal_base_height
+        self.goal_base_visualizer.visualize(goal_base_pos)
         
-        # visualize the current hand pose
-        curr_hand_pos = self.robot.data.body_state_w[:, self.target_hand_idx, :3]
-        curr_hand_ori = self.robot.data.body_state_w[:, self.target_hand_idx, 3:7]
-        self.current_hand_pose_visualizer.visualize(curr_hand_pos, curr_hand_ori)
+        # visualize the current base height
+        current_base_pos = self.robot.data.root_state_w[:, :3].clone()
+        self.current_base_visualizer.visualize(current_base_pos)
         
-        # visualize the shoulder position
-        self.shoulder_pos_visualizer.visualize(self.shoulder_pos_w)
+        # visualize the goal and current hip pitch angles with scaled arrows
+        arrow_euler = torch.tensor([0.0, -math.pi / 2, 0.0], device=self.env.device).expand(self.env.num_envs, -1)
+        arrow_quat = math_utils.quat_from_euler_xyz(arrow_euler[:, 0], arrow_euler[:, 1], arrow_euler[:, 2])
+        left_arrow_pos = self.robot.data.root_state_w[:, :3].clone()
+        left_arrow_pos[:, 2] = 0
+        left_arrow_pos[:, 0] -= 0.1
+        right_arrow_pos = self.robot.data.root_state_w[:, :3].clone()
+        right_arrow_pos[:, 2] = 0
+        right_arrow_pos[:, 0] += 0.1
+        goal_left_hip_arrow_scale = self._resolve_arrow_scale(self.goal_hip_pitch)
+        goal_right_hip_arrow_scale = self._resolve_arrow_scale(self.goal_hip_pitch)
+        current_left_hip_arrow_scale = self._resolve_arrow_scale(self.robot.data.joint_pos[:, self.left_hip_pitch])
+        current_right_hip_arrow_scale = self._resolve_arrow_scale(self.robot.data.joint_pos[:, self.right_hip_pitch])
+        self.goal_left_hip_pitch_visualizer.visualize(left_arrow_pos, arrow_quat, goal_left_hip_arrow_scale)
+        self.goal_right_hip_pitch_visualizer.visualize(right_arrow_pos, arrow_quat, goal_right_hip_arrow_scale)
+        self.current_left_hip_pitch_visualizer.visualize(left_arrow_pos, arrow_quat, current_left_hip_arrow_scale)
+        self.current_right_hip_pitch_visualizer.visualize(right_arrow_pos, arrow_quat, current_right_hip_arrow_scale)
+    
+    def _resolve_arrow_scale(self, angles: torch.Tensor) -> torch.Tensor:
+        """Resolve the arrow scale based on the hip pitch angle (magnitude)."""
+        #TODO(OKJ): fix the scale of the arrow
+        return torch.abs(angles) * 0.1
