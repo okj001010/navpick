@@ -28,6 +28,8 @@ class HandReachCommandCfg(CommandTermCfg):
     torso_body_name: str = "torso_link"
 
     shoulder_offset: list[float] = [0.0039563, -0.10021, 0.24778]
+    
+    keypoint_edge_length: float = 0.1
 
     goal_hand_pose_visualizer_cfg: VisualizationMarkersCfg = FRAME_MARKER_CFG.replace(
         prim_path="/Visuals/Command/goal_hand_pose"
@@ -44,6 +46,17 @@ class HandReachCommandCfg(CommandTermCfg):
             "sphere": sim_utils.SphereCfg(
                 radius=0.01,
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
+            ),
+        }
+    )
+    
+    vis_hand_keypoints: bool = True
+    keypoint_visualizer_cfg: VisualizationMarkersCfg = VisualizationMarkersCfg(
+        prim_path="/Visuals/Command",
+        markers={
+            "sphere": sim_utils.SphereCfg(
+                radius=0.02,
+                visual_material=sim_utils.PreviewSurfaceCfg(),
             ),
         }
     )

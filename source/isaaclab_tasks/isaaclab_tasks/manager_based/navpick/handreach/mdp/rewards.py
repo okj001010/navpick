@@ -21,14 +21,14 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
-def hand_reach_reward(
+def hand_reach_reward_with_keypoints(
     env: ManagerBasedRLEnv,
     command_name: str = "hand_reach",
+    alpha: float = 1.0,
 ) -> torch.Tensor:
-    """Reward for reaching the hand to the target."""
+    """Reward for reaching the hand to the target with keypoints."""
     command = cast(HandReachCommand, env.command_manager.get_term(command_name))
-    curr_hand_pose_b, goal_hand_pose_b = command.current_and_goal_hand_poses
-    error_hand_pos = curr_hand_pose_b[:, :3] - goal_hand_pose_b[:, :3]
-    error_hand_rot = wrap_to_pi(curr_hand_pose_b[:, 3:6] - goal_hand_pose_b[:, 3:6])
-    return torch.exp(-4.0 * torch.square(error_hand_pos).sum(dim=-1)) + \
-           torch.exp(-4.0 * torch.square(error_hand_rot).sum(dim=-1))
+    curr_hand_keypoints_w, goal_hand_keypoints_w = command.current_and_goal_hand_keypoints  # (N, 8, 3)
+    return torch.exp(
+        -alpha * torch.square(curr_hand_keypoints_w - goal_hand_keypoints_w).sum(dim=-1)
+    ).sum(dim=-1)

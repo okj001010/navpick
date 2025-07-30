@@ -138,8 +138,8 @@ class RewardsCfg:
     """Reward terms for the MDP."""
     
     # task reward
-    hand_reach = RewTerm(func=mdp.hand_reach_reward, weight=1.0, params={"command_name": "hand_reach"})
-    
+    hand_reach = RewTerm(func=mdp.hand_reach_reward_with_keypoints, weight=1.0, params={"command_name": "hand_reach", "alpha": 4.0})
+
     # regularization
     action_acc_l2 = RewTerm(func=mdp.action_acc_l2, weight=-0.01)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
