@@ -11,18 +11,19 @@ specify the reward function and its parameters.
 
 from __future__ import annotations
 
+from isaaclab.sensors.contact_sensor.contact_sensor_cfg import ContactSensorCfg
 import torch
 from typing import TYPE_CHECKING, cast
 
 from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.sensors import ContactSensor
 from .commands.bodypose_command import BodyPoseCommand
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
-# FIXME(OKJ): track body command
 def body_pose_reward(
     env: ManagerBasedRLEnv,
     command_name: str = "body_pose",
@@ -76,3 +77,30 @@ def leg_pos_symmetry(
     right_leg_joint = asset.data.joint_pos[:, right_leg_joint_ids]
 
     return torch.norm(left_leg_joint - right_leg_joint)
+
+def contact_ground(
+    env: ManagerBasedRLEnv,
+    max_force: float,
+    left_contact_link_name: str,
+    right_contact_link_name: str,
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
+) -> torch.Tensor:
+    """Reward for ground contact: product of normalized left and right foot contact forces."""
+    # extract sensors
+    contact_sensors = cast(ContactSensor, env.scene[sensor_cfg.name])
+    left_contact_link_id = contact_sensors.find_bodies(left_contact_link_name)[0][0]
+    right_contact_link_id = contact_sensors.find_bodies(right_contact_link_name)[0][0]
+
+    # get net contact forces (N, 3)
+    left_forces = cast(torch.Tensor, contact_sensors.data.net_forces_w)[:, left_contact_link_id]
+    right_forces = cast(torch.Tensor, contact_sensors.data.net_forces_w)[:, right_contact_link_id]
+
+    # compute force norms
+    left_force_norm = torch.norm(left_forces, dim=-1)   # (N,)
+    right_force_norm = torch.norm(right_forces, dim=-1) # (N,)
+
+    # normalize forces and clamp to [0, 1]
+    left_contact = torch.clamp(left_force_norm / max_force, min=0.0, max=1.0)
+    right_contact = torch.clamp(right_force_norm / max_force, min=0.0, max=1.0)
+
+    return left_contact * right_contact

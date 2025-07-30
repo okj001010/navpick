@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Optional, List
 
 from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
-from isaaclab.sensors import ContactSensor
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -51,25 +50,3 @@ def default_joint_error(
         torch.exp(-2 * torch.square(asset.data.joint_pos[:, joint_ids] - asset.data.default_joint_pos[:, joint_ids])),
         dim=1,
     )
-
-
-def contact_ground(
-    env: ManagerBasedRLEnv,
-    sensor_cfg: SceneEntityCfg,
-) -> torch.Tensor:
-    """Reward for ground contact."""
-    # asset: Articulation = env.scene[asset_cfg.name]
-    # sensor: ContactSensor = env.scene[asset_cfg.sensor_cfg.name]
-    
-    # # consider only ground contacts
-    # ground_contact = sensor.get_contacts(asset_cfg.sensor_cfg.body_names)
-    
-    # if not ground_contact:
-    #     return torch.zeros_like(env.robot_state.reward)
-    
-    # # compute the reward as the product of left and right ankle contact forces
-    # left_contact = ground_contact.get("left_ankle_roll_link", 0.0)
-    # right_contact = ground_contact.get("right_ankle_roll_link", 0.0)
-    
-    # return left_contact * right_contact
-    return torch.zeros(env.num_envs, device=env.device)

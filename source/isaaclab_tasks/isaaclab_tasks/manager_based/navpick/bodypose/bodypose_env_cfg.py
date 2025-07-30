@@ -148,7 +148,10 @@ class RewardsCfg:
         weight=1.0,
         params={
             # consider only ground contacts
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_ankle_roll_link$"),
+            "max_force": 100.0,
+            "left_contact_link_name": "left_ankle_roll_link",
+            "right_contact_link_name": "right_ankle_roll_link",
+            "sensor_cfg": SceneEntityCfg("contact_forces"),
         }
     )
 
