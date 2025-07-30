@@ -29,22 +29,11 @@ def action_acc_l2(env: ManagerBasedRLEnv) -> torch.Tensor:
         dim=1,
     )
 
-# def collision_penalty(
-#     env: ManagerBasedRLEnv,
-#     sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces"),
-#     force_threshold: float = 0.1,
-# ) -> torch.Tensor:
-#     """Penalize collisions with the environment."""
-#     # FIXME(OKJ): remove ankle roll pitch and ground plane contact
-#     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
-#     contacts = contact_sensor.data.net_forces_w[:, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0] > force_threshold
-#     return contacts
-
 
 def default_joint_error(
     env: ManagerBasedRLEnv,
+    joint_names: Optional[List[str]] = None,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    joint_names: Optional[List[str]] = None
 ) -> torch.Tensor:
     """Penalize the joint position error from the default position."""
     asset: Articulation = env.scene[asset_cfg.name]
@@ -62,3 +51,25 @@ def default_joint_error(
         torch.exp(-2 * torch.square(asset.data.joint_pos[:, joint_ids] - asset.data.default_joint_pos[:, joint_ids])),
         dim=1,
     )
+
+
+def contact_ground(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+) -> torch.Tensor:
+    """Reward for ground contact."""
+    # asset: Articulation = env.scene[asset_cfg.name]
+    # sensor: ContactSensor = env.scene[asset_cfg.sensor_cfg.name]
+    
+    # # consider only ground contacts
+    # ground_contact = sensor.get_contacts(asset_cfg.sensor_cfg.body_names)
+    
+    # if not ground_contact:
+    #     return torch.zeros_like(env.robot_state.reward)
+    
+    # # compute the reward as the product of left and right ankle contact forces
+    # left_contact = ground_contact.get("left_ankle_roll_link", 0.0)
+    # right_contact = ground_contact.get("right_ankle_roll_link", 0.0)
+    
+    # return left_contact * right_contact
+    return torch.zeros(env.num_envs, device=env.device)

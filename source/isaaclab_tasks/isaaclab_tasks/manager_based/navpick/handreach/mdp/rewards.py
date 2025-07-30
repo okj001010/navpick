@@ -23,8 +23,8 @@ if TYPE_CHECKING:
 
 def hand_reach_reward_with_keypoints(
     env: ManagerBasedRLEnv,
-    command_name: str = "hand_reach",
     alpha: float = 1.0,
+    command_name: str = "hand_reach",
 ) -> torch.Tensor:
     """Reward for reaching the hand to the target with keypoints."""
     command = cast(HandReachCommand, env.command_manager.get_term(command_name))

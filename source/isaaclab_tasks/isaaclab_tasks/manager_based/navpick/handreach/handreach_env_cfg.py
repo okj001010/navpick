@@ -148,8 +148,8 @@ class RewardsCfg:
         weight=-5.0,
         params={
             # consider only self collisions (not ground)
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="^(?!.*_ankle_roll_link$).*"),
             "threshold": 1.0,
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="^(?!.*_ankle_roll_link$).*"),
         }
     )
     # default_joint_error = RewTerm(func=mdp.default_joint_error, weight=0.2, params={"joint_names": handreach_joint_names})

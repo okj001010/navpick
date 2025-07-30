@@ -135,7 +135,14 @@ class RewardsCfg:
     
     # behavioral rewards
     waist_roll_error = RewTerm(func=mdp.waist_roll_error, weight=1.0)
-    leg_pos_symmetry = RewTerm(func=mdp.leg_pos_symmetry, weight=0.5)
+    leg_pos_symmetry = RewTerm(
+        func=mdp.leg_pos_symmetry,
+        weight=0.5,
+        params={
+            "left_leg_joint_names": "^left_(hip|knee|ankle).*_joint$",
+            "right_leg_joint_names": "^right_(hip|knee|ankle).*_joint$",
+        }
+    )
     contact_ground = RewTerm(
         func=mdp.contact_ground,
         weight=1.0,
@@ -153,8 +160,8 @@ class RewardsCfg:
         weight=-5.0,
         params={
             # consider only self collisions (not ground)
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="^(?!.*_ankle_roll_link$).*"),
             "threshold": 1.0,
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="^(?!.*_ankle_roll_link$).*"),
         }
     )
     default_joint_error = RewTerm(func=mdp.default_joint_error, weight=0.2, params={"joint_names": bodypose_joint_names})
@@ -163,6 +170,22 @@ class RewardsCfg:
 @configclass
 class EventCfg:
     """Configuration for events."""
+    
+    reset_base = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+            "velocity_range": {
+                "x": (-0.0, 0.0),
+                "y": (-0.0, 0.0),
+                "z": (-0.0, 0.0),
+                "roll": (-0.0, 0.0),
+                "pitch": (-0.0, 0.0),
+                "yaw": (-0.0, 0.0),
+            },
+        },
+    )
     
     reset_robot_joints = EventTerm(
         func=mdp.reset_joints_by_offset,

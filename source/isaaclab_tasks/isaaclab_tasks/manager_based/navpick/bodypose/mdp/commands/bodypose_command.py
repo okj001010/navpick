@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import torch
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation
@@ -64,9 +64,11 @@ class BodyPoseCommand(CommandTerm):
             low=torch.tensor(ranges.base_height[0], device=self.env.device),
             high=torch.tensor(ranges.base_height[1], device=self.env.device),
         )
+        # convert hip pitch range from degrees to radians
+        hip_pitch_range = (math.radians(ranges.hip_pitch[0]), math.radians(ranges.hip_pitch[1]))
         self.hip_pitch_sampler = torch.distributions.Uniform(
-            low=torch.tensor(ranges.hip_pitch[0], device=self.env.device),
-            high=torch.tensor(ranges.hip_pitch[1], device=self.env.device),
+            low=torch.tensor(hip_pitch_range[0], device=self.env.device),
+            high=torch.tensor(hip_pitch_range[1], device=self.env.device),
         )
 
 
@@ -106,8 +108,8 @@ class BodyPoseCommand(CommandTerm):
 
     def _resample_command(self, env_ids: Sequence[int]):
         """Resample the command for the given environment IDs."""
-        self.goal_base_height[env_ids] = self.base_height_sampler.sample((len(env_ids), 1))
-        self.goal_hip_pitch[env_ids] = self.hip_pitch_sampler.sample((len(env_ids), 1))
+        self.goal_base_height[env_ids] = self.base_height_sampler.sample((len(env_ids),))
+        self.goal_hip_pitch[env_ids] = self.hip_pitch_sampler.sample((len(env_ids),))
 
     def _update_command(self):
         pass
@@ -143,34 +145,41 @@ class BodyPoseCommand(CommandTerm):
         if not self.robot.is_initialized:
             return
         
+        heading_direction = torch.stack((torch.cos(self.robot.data.heading_w), torch.sin(self.robot.data.heading_w)), dim=-1)
+        
         # visualize the goal base height
         goal_base_pos = self.robot.data.root_state_w[:, :3].clone()
         goal_base_pos[:, 2] = self.goal_base_height
+        goal_base_pos[:, :2] -= 0.2 * heading_direction
         self.goal_base_visualizer.visualize(goal_base_pos)
         
         # visualize the current base height
         current_base_pos = self.robot.data.root_state_w[:, :3].clone()
+        current_base_pos[:, :2] -= 0.2 * heading_direction
         self.current_base_visualizer.visualize(current_base_pos)
-        
-        # visualize the goal and current hip pitch angles with scaled arrows
-        arrow_euler = torch.tensor([0.0, -math.pi / 2, 0.0], device=self.env.device).expand(self.env.num_envs, -1)
-        arrow_quat = math_utils.quat_from_euler_xyz(arrow_euler[:, 0], arrow_euler[:, 1], arrow_euler[:, 2])
-        left_arrow_pos = self.robot.data.root_state_w[:, :3].clone()
-        left_arrow_pos[:, 2] = 0
-        left_arrow_pos[:, 0] -= 0.1
-        right_arrow_pos = self.robot.data.root_state_w[:, :3].clone()
-        right_arrow_pos[:, 2] = 0
-        right_arrow_pos[:, 0] += 0.1
-        goal_left_hip_arrow_scale = self._resolve_arrow_scale(self.goal_hip_pitch)
-        goal_right_hip_arrow_scale = self._resolve_arrow_scale(self.goal_hip_pitch)
-        current_left_hip_arrow_scale = self._resolve_arrow_scale(self.robot.data.joint_pos[:, self.left_hip_pitch])
-        current_right_hip_arrow_scale = self._resolve_arrow_scale(self.robot.data.joint_pos[:, self.right_hip_pitch])
-        self.goal_left_hip_pitch_visualizer.visualize(left_arrow_pos, arrow_quat, goal_left_hip_arrow_scale)
-        self.goal_right_hip_pitch_visualizer.visualize(right_arrow_pos, arrow_quat, goal_right_hip_arrow_scale)
-        self.current_left_hip_pitch_visualizer.visualize(left_arrow_pos, arrow_quat, current_left_hip_arrow_scale)
-        self.current_right_hip_pitch_visualizer.visualize(right_arrow_pos, arrow_quat, current_right_hip_arrow_scale)
+
+        # # visualize the goal and current hip pitch angles with scaled cylinders
+        self.goal_left_hip_pitch_visualizer.visualize(*self._resolve_cylinder_vis(True, True, self.goal_hip_pitch))
+        self.goal_right_hip_pitch_visualizer.visualize(*self._resolve_cylinder_vis(False, True, self.goal_hip_pitch))
+        self.current_left_hip_pitch_visualizer.visualize(*self._resolve_cylinder_vis(True, False, self.robot.data.joint_pos[:, self.left_hip_pitch]))
+        self.current_right_hip_pitch_visualizer.visualize(*self._resolve_cylinder_vis(False, False, self.robot.data.joint_pos[:, self.right_hip_pitch]))
     
-    def _resolve_arrow_scale(self, angles: torch.Tensor) -> torch.Tensor:
-        """Resolve the arrow scale based on the hip pitch angle (magnitude)."""
-        #TODO(OKJ): fix the scale of the arrow
-        return torch.abs(angles) * 0.1
+    def _resolve_cylinder_vis(self, is_left, is_goal, angles: torch.Tensor) -> tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]:
+        """Resolve the cylinder position and scale based on the hip pitch angle."""
+        cylinder_direction = torch.stack((torch.sin(self.robot.data.heading_w), -torch.cos(self.robot.data.heading_w)), dim=-1)
+        cylinder_pos = self.robot.data.root_state_w[:, :3].clone()
+        cylinder_pos[:, 2] = 0
+        
+        if is_goal:
+            offset = 0.2
+        else:
+            offset = 0.3
+        
+        if is_left:
+            cylinder_pos[:, :2] -= offset * cylinder_direction
+        else:
+            cylinder_pos[:, :2] += offset * cylinder_direction
+
+        cylinder_scale = torch.ones((self.env.num_envs, 3), device=self.env.device)
+        cylinder_scale[:, 2] = torch.abs(angles) * 10
+        return cylinder_pos, None, cylinder_scale
