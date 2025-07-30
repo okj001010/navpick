@@ -117,8 +117,6 @@ class RewardManager(ManagerBase):
             # r_1 + r_2 + ... + r_n
             episodic_sum_avg = torch.mean(self._episode_sums[key][env_ids])
             extras["Episode_Reward/" + key] = episodic_sum_avg / self._env.max_episode_length_s
-            if extras["Episode_Reward/" + key] < -1e5:
-                breakpoint()
             # reset episodic sum
             self._episode_sums[key][env_ids] = 0.0
         # reset all the reward terms

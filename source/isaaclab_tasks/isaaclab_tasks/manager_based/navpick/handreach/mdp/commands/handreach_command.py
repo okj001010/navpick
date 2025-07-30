@@ -63,7 +63,7 @@ class HandReachCommand(CommandTerm):
         """The desired hand pose command in the base frame. Shape is (num_envs, 6)."""
         return torch.cat((
             self.goal_hand_pose_b[:, :3],
-            math_utils.axis_angle_from_quat(self.goal_hand_pose_b[:, 3:7])
+            math_utils.wrap_to_pi(math_utils.axis_angle_from_quat(self.goal_hand_pose_b[:, 3:7]))
         ), dim=-1)
     
     @property
@@ -142,7 +142,7 @@ class HandReachCommand(CommandTerm):
         ), dim=-1)
         self.goal_hand_pose_w[env_ids, :3] = self.shoulder_pos_w[env_ids] + goal_pos
         
-        rpy = torch.rand((self.env.num_envs, 3), device=self.env.device) * math.pi - math.pi / 2
+        rpy = torch.rand((self.env.num_envs, 3), device=self.env.device) * math.pi / 2 - math.pi / 4
         goal_ori = math_utils.quat_from_euler_xyz(rpy[:, 0], rpy[:, 1], rpy[:, 2])
         self.goal_hand_pose_w[env_ids, 3:7] = goal_ori
 
@@ -162,14 +162,7 @@ class HandReachCommand(CommandTerm):
     def _set_debug_vis_impl(self, debug_vis: bool) -> None:
         """Set debug visualization implementation."""
         if debug_vis:
-            if not self.cfg.vis_hand_keypoints:
-                if not hasattr(self, "goal_hand_pose_visualizer"):
-                    self.goal_hand_pose_visualizer = VisualizationMarkers(self.cfg.goal_hand_pose_visualizer_cfg)
-                    self.current_hand_pose_visualizer = VisualizationMarkers(self.cfg.current_hand_pose_visualizer_cfg)
-                # set their visibility to true
-                self.goal_hand_pose_visualizer.set_visibility(True)
-                self.current_hand_pose_visualizer.set_visibility(True)
-            else:
+            if self.cfg.vis_hand_keypoints:
                 if not hasattr(self, "goal_keypoints_visualizer"):
                     colors = list(itertools.product([0.0, 1.0], repeat=3))
                     self.goal_keypoints_visualizer = []
@@ -182,6 +175,7 @@ class HandReachCommand(CommandTerm):
                             prim_path=f"{self.cfg.keypoint_visualizer_cfg.prim_path}/curr_keypoint_{i}"
                         )
                         goal_keypoint_vis_cfg.markers["sphere"].visual_material.diffuse_color = colors[i]
+                        goal_keypoint_vis_cfg.markers["sphere"].visual_material.opacity = 0.2
                         curr_keypoint_vis_cfg.markers["sphere"].visual_material.diffuse_color = colors[i]
                         goal_keypoint_vis = VisualizationMarkers(goal_keypoint_vis_cfg)
                         curr_keypoint_vis = VisualizationMarkers(curr_keypoint_vis_cfg)
@@ -190,24 +184,38 @@ class HandReachCommand(CommandTerm):
                 # set their visibility to true
                 for vis in self.goal_keypoints_visualizer + self.curr_keypoints_visualizer:
                     vis.set_visibility(True)
+            else:
+                if not hasattr(self, "goal_hand_pose_visualizer"):
+                    self.goal_hand_pose_visualizer = VisualizationMarkers(self.cfg.goal_hand_pose_visualizer_cfg)
+                    self.current_hand_pose_visualizer = VisualizationMarkers(self.cfg.current_hand_pose_visualizer_cfg)
+                # set their visibility to true
+                self.goal_hand_pose_visualizer.set_visibility(True)
+                self.current_hand_pose_visualizer.set_visibility(True)
 
         else:
-            if not self.cfg.vis_hand_keypoints:
-                if hasattr(self, "goal_hand_pose_visualizer"):
-                    self.goal_hand_pose_visualizer.set_visibility(False)
-                    self.current_hand_pose_visualizer.set_visibility(False)
-            else:
+            if self.cfg.vis_hand_keypoints:
                 if hasattr(self, "keypoints_visualizer"):
                     for vis in self.keypoints_visualizer:
                         vis.set_visibility(False)
                 self.keypoints_visualizer = []
+            else:
+                if hasattr(self, "goal_hand_pose_visualizer"):
+                    self.goal_hand_pose_visualizer.set_visibility(False)
+                    self.current_hand_pose_visualizer.set_visibility(False)
         
     def _debug_vis_callback(self, event):
         """Debug visualization callback."""
         if not self.robot.is_initialized:
             return
         
-        if not self.cfg.vis_hand_keypoints:
+        if self.cfg.vis_hand_keypoints:
+            # visualize the goal and current hand keypoints
+            curr_hand_keypoints_w, goal_hand_keypoints_w = self.current_and_goal_hand_keypoints
+            for i in range(8):
+                self.goal_keypoints_visualizer[i].visualize(goal_hand_keypoints_w[:, i, :3])
+                self.curr_keypoints_visualizer[i].visualize(curr_hand_keypoints_w[:, i, :3])
+        
+        else:
             # visualize the goal hand pose
             goal_hand_pos = self.goal_hand_pose_w[:, :3]
             goal_hand_ori = self.goal_hand_pose_w[:, 3:7]
@@ -217,10 +225,3 @@ class HandReachCommand(CommandTerm):
             curr_hand_pos = self.robot.data.body_state_w[:, self.target_hand_idx, :3]
             curr_hand_ori = self.robot.data.body_state_w[:, self.target_hand_idx, 3:7]
             self.current_hand_pose_visualizer.visualize(curr_hand_pos, curr_hand_ori)
-        
-        else:
-            # visualize the goal and current hand keypoints
-            curr_hand_keypoints_w, goal_hand_keypoints_w = self.current_and_goal_hand_keypoints
-            for i in range(8):
-                self.goal_keypoints_visualizer[i].visualize(goal_hand_keypoints_w[:, i, :3])
-                self.curr_keypoints_visualizer[i].visualize(curr_hand_keypoints_w[:, i, :3])
