@@ -2,9 +2,3 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
-"""NavPick environments"""
-
-from .bodypose import *  # noqa
-from .handreach import *  # noqa
-from .composer import *  # noqa

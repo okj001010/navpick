@@ -77,7 +77,6 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
@@ -130,6 +129,13 @@ class CommandsCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
     
+    # default reward
+    termination_penalty = RewTerm(
+        func=mdp.is_terminated_term,
+        params={"term_names": ["pelvis_below_minimum", "bad_pelvis_ori"]},
+        weight=-200.0,
+    )
+    
     # task reward
     body_pose = RewTerm(func=mdp.body_pose_reward, weight=1.0, params={"command_name": "body_pose"})
     
@@ -137,7 +143,15 @@ class RewardsCfg:
     waist_roll_error = RewTerm(func=mdp.waist_roll_error, weight=1.0)
     leg_pos_symmetry = RewTerm(
         func=mdp.leg_pos_symmetry,
-        weight=0.5,
+        weight=-0.5,
+        params={
+            "left_leg_joint_names": "^left_(hip|knee|ankle).*_joint$",
+            "right_leg_joint_names": "^right_(hip|knee|ankle).*_joint$",
+        }
+    )
+    leg_force_symmetry = RewTerm(
+        func=mdp.leg_force_symmetry,
+        weight=-0.2,
         params={
             "left_leg_joint_names": "^left_(hip|knee|ankle).*_joint$",
             "right_leg_joint_names": "^right_(hip|knee|ankle).*_joint$",
@@ -206,6 +220,7 @@ class TerminationsCfg:
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     pelvis_below_minimum = DoneTerm(func=mdp.pelvis_below_minimum, params={"minimum_height": 0.2})
+    bad_pelvis_ori = DoneTerm(func=mdp.bad_pelvis_ori, params={"limit_euler_angle": [1.5, 1.5]})
 
 
 ##

@@ -37,7 +37,6 @@ def pelvis_below_minimum(
     return is_below
 
 
-# NOTE(OKJ): I think pelvis_below_minimum is more softer than bad_pelvis_ori, so we can use it as a termination.
 def bad_pelvis_ori(
     env: ManagerBasedRLEnv,
     limit_euler_angle: list[float] = [0.5, 1.5],

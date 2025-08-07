@@ -15,7 +15,7 @@ import torch
 from typing import TYPE_CHECKING, Optional, List
 
 from isaaclab.assets import Articulation
-from isaaclab.managers import SceneEntityCfg
+from isaaclab.managers import SceneEntityCfg, RewardTermCfg, ManagerTermBase
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -50,3 +50,14 @@ def default_joint_error(
         torch.exp(-2 * torch.square(asset.data.joint_pos[:, joint_ids] - asset.data.default_joint_pos[:, joint_ids])),
         dim=1,
     )
+    
+
+def is_terminated_term(
+    env: ManagerBasedRLEnv,
+    term_names: list[str]
+) -> torch.Tensor:
+    """Penalize termination for specific terms that don't correspond to episodic timeouts."""
+    reset_buf = torch.zeros(env.num_envs, device=env.device)
+    for term in term_names:
+        reset_buf += env.termination_manager.get_term(term)
+    return (reset_buf * (~env.termination_manager.time_outs)).float()

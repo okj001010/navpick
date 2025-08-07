@@ -393,6 +393,24 @@ class CommandManager(ManagerBase):
         """
         return self._terms[name]
 
+    def get_metrics(self, env_ids: Sequence[int]) -> dict[str, torch.Tensor]:
+        """Returns the metrics for the specified environment IDs.
+
+        Args:
+            env_ids: The list of environment IDs to get the metrics for.
+
+        Returns:
+            A dictionary containing the metrics for the specified environment IDs.
+        """
+        metrics = {}
+        for term in self._terms.values():
+            get_metrics = getattr(term, "get_metrics", None)
+            if callable(get_metrics):
+                term_metrics = get_metrics(env_ids)
+                for metric_name, metric_value in term_metrics.items():
+                    metrics[metric_name] = metric_value
+        return metrics
+
     """
     Helper functions.
     """

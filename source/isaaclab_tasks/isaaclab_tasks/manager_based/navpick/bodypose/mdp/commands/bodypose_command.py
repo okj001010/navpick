@@ -91,7 +91,7 @@ class BodyPoseCommand(CommandTerm):
         """Reset the metrics"""
         extras = {}
         for name, metric in self.metrics.items():
-            extras[name] = metric.mean().item()
+            extras[name] = torch.mean(metric[env_ids])
             metric.zero_()
         return extras
 
@@ -101,10 +101,10 @@ class BodyPoseCommand(CommandTerm):
     """
 
     def _update_metrics(self):
-        self.metrics["error_base_height"] += torch.abs(self.robot.data.root_state_w[:, 2] - self.goal_base_height)
+        self.metrics["error_base_height"] = torch.abs(self.robot.data.root_state_w[:, 2] - self.goal_base_height)
         left_hip_pitch_error = torch.abs(self.robot.data.joint_pos[:, self.left_hip_pitch] - self.goal_hip_pitch)
         right_hip_pitch_error = torch.abs(self.robot.data.joint_pos[:, self.right_hip_pitch] - self.goal_hip_pitch)
-        self.metrics["error_hip_pitch"] += left_hip_pitch_error + right_hip_pitch_error
+        self.metrics["error_hip_pitch"] = left_hip_pitch_error + right_hip_pitch_error
 
     def _resample_command(self, env_ids: Sequence[int]):
         """Resample the command for the given environment IDs."""

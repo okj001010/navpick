@@ -135,6 +135,7 @@ def main():
     )
 
     dt = env.unwrapped.step_dt
+    interval = env.unwrapped.max_episode_length
 
     # reset environment
     obs, _ = env.get_observations()
@@ -147,9 +148,14 @@ def main():
             # agent stepping
             actions = policy(obs)
             # env stepping
-            obs, _, _, _ = env.step(actions)
-        if args_cli.video:
+            obs, _, _, extras = env.step(actions)
             timestep += 1
+        
+        if timestep == interval:
+            log(env, extras, interval)
+            break
+        
+        if args_cli.video:
             # Exit the play loop after recording one video
             if timestep == args_cli.video_length:
                 break
@@ -161,6 +167,31 @@ def main():
 
     # close the simulator
     env.close()
+
+
+def log(env: RslRlVecEnvWrapper, extra: dict[str, torch.Tensor], interval: int, width: int = 70, pad: int = 30):
+    """Log the metrics."""
+    log_string = f" \033[1m         Logging (interval : {interval} steps)\033[0m\n"
+    log_string += f"""{'#' * width}\n"""
+    
+    timeout = extra['time_outs']
+    num_envs = timeout.shape[0]
+    env_ids = torch.where(timeout)[0].tolist()
+    terminated_ratio = 1 - len(env_ids) / num_envs
+    log_string += f" \033[1mTerminated Ratio:\033[0m {terminated_ratio:.2f}\n"
+
+    command_manager = env.unwrapped.command_manager
+    metrics = command_manager.get_metrics(env_ids)
+    
+    log_string += f" \033[1mMetrics Information:\033[0m\n"
+    for key, value in metrics.items():
+        mean = value.mean().item()
+        std = value.std().item()
+        log_string += f"""{f'{key}:':>{pad}} mean = {mean:.4f} , std = {std:.4f}\n"""
+
+    log_string += f"""{'#' * width}\n"""
+    
+    print(log_string)
 
 
 if __name__ == "__main__":

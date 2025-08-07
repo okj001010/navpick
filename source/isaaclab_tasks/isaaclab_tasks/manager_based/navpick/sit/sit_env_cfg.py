@@ -21,8 +21,7 @@ from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 from . import mdp
-from . import handreach_joint_names, non_handreach_joint_names
-from ..base.g1_spawn_info import G1_FIXED_CFG
+from ..base.g1_spawn_info import G1_CFG
 
 ##
 # Scene definition
@@ -60,14 +59,6 @@ class MySceneCfg(InteractiveSceneCfg):
 ##
 
 
-# Wrapper for the partial joint position & velocity function
-def handreach_joint_pos_rel(env):
-    return mdp.partial_joint_pos_rel(env, joint_names=handreach_joint_names)
-
-def handreach_joint_vel_rel(env):
-    return mdp.partial_joint_vel_rel(env, joint_names=handreach_joint_names)
-
-
 @configclass
 class ObservationsCfg:
     """Observation specifications for the MDP."""
@@ -77,21 +68,22 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
         )
-        partial_joint_pos = ObsTerm(
-            func=handreach_joint_pos_rel,
+        joint_pos = ObsTerm(
+            func=mdp.joint_pos_rel,
             noise=Unoise(n_min=-0.01, n_max=0.01),
         )
-        partial_joint_vel = ObsTerm(
-            func=handreach_joint_vel_rel,
+        joint_vel = ObsTerm(
+            func=mdp.joint_vel_rel,
             noise=Unoise(n_min=-1.5, n_max=1.5),
         )
         actions = ObsTerm(func=mdp.last_action, params={"action_name": "joint_pos"}, noise=Unoise(n_min=-0.01, n_max=0.01))
-        hand_reach_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "hand_reach"})
+        sit_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "sit_command"})
 
         def __post_init__(self):
             self.enable_corruption = False
@@ -105,26 +97,16 @@ class ObservationsCfg:
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_pos = mdp.JointPositionActionCfg(
-        asset_name="robot",
-        joint_names=handreach_joint_names,
-        scale=0.5,
-        use_default_offset=True
-    )
-    fix_joint_pos = mdp.FixJointPositionActionCfg(
-        asset_name="robot",
-        joint_names=non_handreach_joint_names,
-        use_default_offset=True
-    )
+    joint_pos = mdp.JointPositionActionCfg(asset_name="robot", joint_names=[".*"], scale=0.5, use_default_offset=True)
 
 
 @configclass
 class CommandsCfg:
     """Command specifications for the MDP."""
 
-    hand_reach = mdp.HandReachCommandCfg(
+    sit_command = mdp.SitCommandCfg(
         asset_name="robot",
-        target_hand_name="right_rubber_hand",
+        ranges=mdp.SitCommandCfg.Ranges(height=(0.3, 0.7)),
         resampling_time_range=(5.0, 5.0), # avoid resampling during the episode
         debug_vis= True,
     )
@@ -134,26 +116,29 @@ class CommandsCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
     
-    # task reward
-    hand_reach = RewTerm(func=mdp.hand_reach_reward_with_keypoints, weight=1.0, params={"command_name": "hand_reach", "alpha": 8.0})
-
-    # regularization
-    action_acc_l2 = RewTerm(func=mdp.action_acc_l2, weight=-0.01)
-    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
-    collision_penalty = RewTerm(
-        func=mdp.undesired_contacts,
-        weight=-5.0,
-        params={
-            # consider only self collisions (not ground)
-            "threshold": 1.0,
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="^(?!.*_ankle_roll_link$).*"),
-        }
-    )
+    # TODO
+    # Use reward terms from eetrack sitting
 
 
 @configclass
 class EventCfg:
     """Configuration for events."""
+    
+    reset_base = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+            "velocity_range": {
+                "x": (-0.0, 0.0),
+                "y": (-0.0, 0.0),
+                "z": (-0.0, 0.0),
+                "roll": (-0.0, 0.0),
+                "pitch": (-0.0, 0.0),
+                "yaw": (-0.0, 0.0),
+            },
+        },
+    )
     
     reset_robot_joints = EventTerm(
         func=mdp.reset_joints_by_offset,
@@ -169,8 +154,9 @@ class EventCfg:
 class TerminationsCfg:
     """Termination terms for the MDP."""
 
-    # NOTE: Since the root is fixed, we don't need to check for other termination.
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
+    pelvis_below_minimum = DoneTerm(func=mdp.pelvis_below_minimum, params={"minimum_height": 0.2})
+    bad_pelvis_ori = DoneTerm(func=mdp.bad_pelvis_ori, params={"limit_euler_angle": [1.0, 1.0]})
 
 
 ##
@@ -179,7 +165,7 @@ class TerminationsCfg:
 
 
 @configclass
-class G1HandReachEnvCfg(ManagerBasedRLEnvCfg):
+class G1BodyPoseEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the goal conditioned locomotion environment."""
 
     # Scene settings
@@ -210,13 +196,13 @@ class G1HandReachEnvCfg(ManagerBasedRLEnvCfg):
             self.scene.contact_forces.update_period = self.sim.dt
         
         # Scene
-        self.scene.robot = G1_FIXED_CFG.replace(
+        self.scene.robot = G1_CFG.replace(
             prim_path="{ENV_REGEX_NS}/Robot",
         )
 
 
 @configclass
-class G1HandReachEnvCfgPlay(G1HandReachEnvCfg):
+class G1BodyPoseEnvCfgPlay(G1BodyPoseEnvCfg):
     def __post_init__(self) -> None:
         # post init of parent
         super().__post_init__()

@@ -19,6 +19,7 @@ from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import ContactSensor
 from .commands.bodypose_command import BodyPoseCommand
+from .. import bodypose_joint_names
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -78,6 +79,28 @@ def leg_pos_symmetry(
 
     return torch.norm(left_leg_joint - right_leg_joint)
 
+
+
+def leg_force_symmetry(
+    env: ManagerBasedRLEnv,
+    left_leg_joint_names: str,
+    right_leg_joint_names: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward for leg force symmetry."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    left_joint_ids, _ = asset.find_joints(left_leg_joint_names)
+    right_joint_ids, _ = asset.find_joints(right_leg_joint_names)
+    total_joint_ids, _ = asset.find_joints(left_leg_joint_names + "|" + right_leg_joint_names)
+    left_action_idx = [total_joint_ids.index(i) for i in left_joint_ids]
+    right_action_idx = [total_joint_ids.index(i) for i in right_joint_ids]
+    
+    return torch.sum(
+        torch.abs(env.action_manager.action[:, left_action_idx] - env.action_manager.action[:, right_action_idx]),
+        dim=-1
+    )
+    
+
 def contact_ground(
     env: ManagerBasedRLEnv,
     max_force: float,
@@ -94,13 +117,13 @@ def contact_ground(
     # get net contact forces (N, 3)
     left_forces = cast(torch.Tensor, contact_sensors.data.net_forces_w)[:, left_contact_link_id]
     right_forces = cast(torch.Tensor, contact_sensors.data.net_forces_w)[:, right_contact_link_id]
-
-    # compute force norms
-    left_force_norm = torch.norm(left_forces, dim=-1)   # (N,)
-    right_force_norm = torch.norm(right_forces, dim=-1) # (N,)
-
+    
+    # compute force normal (z-axis) components
+    left_contact_normal = left_forces[:, 2]
+    right_contact_normal = right_forces[:, 2]
+    
     # normalize forces and clamp to [0, 1]
-    left_contact = torch.clamp(left_force_norm / max_force, min=0.0, max=1.0)
-    right_contact = torch.clamp(right_force_norm / max_force, min=0.0, max=1.0)
+    left_contact = torch.clamp(left_contact_normal / max_force, min=0.0, max= 1.0)
+    right_contact = torch.clamp(right_contact_normal / max_force, min=0.0, max= 1.0)
 
     return left_contact * right_contact

@@ -53,6 +53,11 @@ class HandReachCommand(CommandTerm):
         
         # metrics
         self.metrics["keypoint_error"] = torch.zeros((env.num_envs,), device=env.device)
+        
+        # metrics buffer (to store the metrics before they are reset)
+        self.metrics_buffer = dict()
+        for name, metric in self.metrics.items():
+            self.metrics_buffer[name] = torch.zeros_like(metric, device=env.device)
 
     """
     Properties
@@ -105,13 +110,19 @@ class HandReachCommand(CommandTerm):
     """
     
     def reset(self, env_ids: Sequence[int] | None = None) -> dict[str, float]:
-        """Reset the metrics"""
+        """Return metrics information"""
         extras = {}
         for name, metric in self.metrics.items():
+            self.metrics_buffer[name] = metric.clone()
             extras[name] = torch.mean(metric[env_ids])
-            metric.zero_()
         return extras
-
+    
+    def get_metrics(self, env_ids: Sequence[int]) -> dict[str, torch.Tensor]:
+        """Get the buffered metrics for the command."""
+        metrics = {}
+        for name, metric in self.metrics_buffer.items():
+            metrics[name] = metric[env_ids].clone()
+        return metrics
 
     """
     Implementation specific functions.
