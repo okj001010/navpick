@@ -68,12 +68,20 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
         )
+        # FIXME (OKJ): I think we can remove these terms
+        # foot_pose = ObsTerm(func=foot_pose_in_robot_root_frame)
+        # hand_pose = ObsTerm(
+        #     func=hand_pose_in_robot_root_frame,
+        #     params={
+        #         "asset_cfg": SceneEntityCfg("robot"),
+        #         "right_hand_cfg": SceneEntityCfg("robot", body_names="right_rubber_hand"),
+        #     },
+        # )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel,
             noise=Unoise(n_min=-0.01, n_max=0.01),
@@ -84,6 +92,9 @@ class ObservationsCfg:
         )
         actions = ObsTerm(func=mdp.last_action, params={"action_name": "joint_pos"}, noise=Unoise(n_min=-0.01, n_max=0.01))
         sit_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "sit_command"})
+        pelvis_height = ObsTerm(func=mdp.pelvis_height)
+        # FIXME (OKJ): I think we can remove these terms
+        # prev_pelvis_height = ObsTerm(func=mdp.prev_pelvis_height)
 
         def __post_init__(self):
             self.enable_corruption = False
@@ -108,6 +119,8 @@ class CommandsCfg:
         asset_name="robot",
         ranges=mdp.SitCommandCfg.Ranges(height=(0.3, 0.7)),
         resampling_time_range=(5.0, 5.0), # avoid resampling during the episode
+        max_velocity=0.1,
+        velocity_command_option="linear",
         debug_vis= True,
     )
 
@@ -116,8 +129,108 @@ class CommandsCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
     
-    # TODO
-    # Use reward terms from eetrack sitting
+    # Default terms
+    alive = RewTerm(func=mdp.is_alive, weight=1.0)
+    
+    termination_penalty = RewTerm(
+        func=mdp.is_terminated_term,
+        params={"term_keys": ["pelvis_below_minimum", "bad_pelvis_ori"]},
+        weight=-50.0,
+    )
+
+    ### Regualization terms
+    rel_torques_l2 = RewTerm(
+        func=mdp.rel_joint_torques_l2,
+        weight=-0.3,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])},
+    )
+
+    energy = RewTerm(
+        func=mdp.energy,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])},
+        weight=-0.0002,
+    )
+
+    dof_acc_l2 = RewTerm(
+        func=mdp.joint_acc_l2,
+        weight=-2.0e-8,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])},
+    )
+
+    dof_vel_l2 = RewTerm(
+        func=mdp.joint_vel_l2,
+        weight=-5e-4,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])},
+    )
+
+    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.05)
+
+    joint_deviation = RewTerm(
+        func=mdp.joint_deviation_l1,
+        weight=-0.2,
+        params={
+            "asset_cfg": SceneEntityCfg(
+                "robot",
+                joint_names=[
+                    ".*_shoulder_pitch_joint",
+                    ".*_shoulder_roll_joint",
+                    ".*_shoulder_yaw_joint",
+                    ".*_elbow_joint",
+                    ".*_wrist_.*",
+                    ".*_hip_yaw_joint",
+                    ".*_hip_roll_joint",
+                    "waist_.*",
+                ],
+            )
+        },
+    )
+
+    torso_upright = RewTerm(
+        func=mdp.keep_torso_upright,
+        weight=-0.3,
+    )
+
+    follow_command_vel_z = RewTerm(func=mdp.follow_command_vel_z, weight=-0.2, params={"command_name": "hands_pose"})
+
+    feet_slide = RewTerm(
+        func=mdp.feet_slide,
+        weight=-0.2,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_ankle_roll_link"),
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_ankle_roll_link"),
+        },
+    )
+
+    standing_still_four_contact_points_v2 = RewTerm(
+        func=mdp.standing_still_four_contact_points_v2,
+        weight=0.1,
+        params={
+            "command_name": "hands_pose",
+            "asset_cfg": SceneEntityCfg("robot"),
+            "left_foot_sensor_cfg": SceneEntityCfg("contact_left_foot"),
+            "right_foot_sensor_cfg": SceneEntityCfg("contact_right_foot"),
+        },
+    )
+
+    zmp_supp_dist_v2 = RewTerm(
+        func=mdp.zmp_supp_dist_v2,
+        weight=0.5,
+        params={
+            "sigma": 10,
+            "command_name": "hands_pose",
+            "asset_cfg": SceneEntityCfg("robot"),
+            "left_foot_sensor_cfg": SceneEntityCfg("contact_left_foot"),
+            "right_foot_sensor_cfg": SceneEntityCfg("contact_right_foot"),
+        },
+    )
+
+    ankle_parallel = RewTerm(
+        func=mdp.ankle_parallel,
+        weight=0.1,
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+        },
+    )
 
 
 @configclass
@@ -155,8 +268,8 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    pelvis_below_minimum = DoneTerm(func=mdp.pelvis_below_minimum, params={"minimum_height": 0.2})
-    bad_pelvis_ori = DoneTerm(func=mdp.bad_pelvis_ori, params={"limit_euler_angle": [1.0, 1.0]})
+    pelvis_below_minimum = DoneTerm(func=mdp.pelvis_below_minimum, params={"minimum_height": 0.25})
+    bad_pelvis_ori = DoneTerm(func=mdp.bad_pelvis_ori, params={"limit_euler_angle": [0.9, 1.0]})
 
 
 ##
@@ -183,7 +296,7 @@ class G1BodyPoseEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 4
-        self.episode_length_s = 5.0
+        self.episode_length_s = 10.0
         # simulation settings
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
@@ -198,6 +311,24 @@ class G1BodyPoseEnvCfg(ManagerBasedRLEnvCfg):
         # Scene
         self.scene.robot = G1_CFG.replace(
             prim_path="{ENV_REGEX_NS}/Robot",
+        )
+        
+        # Contact sensors
+        self.scene.contact_left_foot = mdp.ContactSensorExtraCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/left_ankle_roll_link",
+            filter_prim_paths_expr=["/World/ground/GroundPlane/CollisionPlane"],
+            update_period=0.0,
+            history_length=6,
+            debug_vis=True,
+            max_contact_data_count=8 * 4096,
+        )
+        self.scene.contact_right_foot = mdp.ContactSensorExtraCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/right_ankle_roll_link",
+            filter_prim_paths_expr=["/World/ground/GroundPlane/CollisionPlane"],
+            update_period=0.0,
+            history_length=6,
+            debug_vis=True,
+            max_contact_data_count=8 * 4096,
         )
 
 

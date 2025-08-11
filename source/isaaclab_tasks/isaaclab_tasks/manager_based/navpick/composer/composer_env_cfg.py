@@ -22,10 +22,11 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 from . import mdp
 from ..base.g1_spawn_info import G1_CFG
+from ..locomotion.locomotion_env_cfg import G1LocomotionEnvCfg
 from ..bodypose.bodypose_env_cfg import G1BodyPoseEnvCfg
 from ..handreach.handreach_env_cfg import G1HandReachEnvCfg
 
-LOCOMOTION_ENV_CFG = MISSING
+LOCOMOTION_ENV_CFG = G1LocomotionEnvCfg()
 BODYPOSE_ENV_CFG = G1BodyPoseEnvCfg()
 HANDREACH_ENV_CFG = G1HandReachEnvCfg()
 
@@ -104,29 +105,33 @@ class ActionsCfg:
     composer_action = mdp.HighLevelPolicyActionCfg(
         asset_name="robot",
         low_level_decimation=4,
-        upper_actions={
-            "handreach": mdp.PreTrainedPolicyActionCfg(
-                low_level_env_cfg=HANDREACH_ENV_CFG,
-                policy_path="path/to/pretrained_policy.pt",
-                command_name="handreach_command",
-                command_dim=6,
-            )
-        },
-        lower_actions={
+        low_level_actions={
             "locomotion": mdp.PreTrainedPolicyActionCfg(
                 low_level_env_cfg=LOCOMOTION_ENV_CFG,
-                policy_path="path/to/low_level_policy.pt",
-                command_name="locomotion_command",
-                command_dim=3,
+                policy_path="logs/rsl_rl/g1_locomotion/2025-08-08_15-54-39_debug0/exported/policy.pt",
+                command_name="velocity_commands",
+                command_dim=3,  # (x, y, yaw)
             ),
             "bodypose": mdp.PreTrainedPolicyActionCfg(
                 low_level_env_cfg=BODYPOSE_ENV_CFG,
-                policy_path="path/to/bodypose_policy.pt",
+                policy_path="logs/rsl_rl/g1_bodypose/2025-08-07_12-05-01_exp6/exported/policy.pt",
                 command_name="body_pose_command",
-                command_dim=2,
-            )
-        },
+                command_dim=2,  # (base height, pitch angle)
+            ),
+            "handreach": mdp.PreTrainedPolicyActionCfg(
+                low_level_env_cfg=HANDREACH_ENV_CFG,
+                policy_path="logs/rsl_rl/g1_handreach/2025-08-06_16-40-15_exp10/exported/policy.pt",
+                command_name="hand_reach_command",
+                command_dim=6,  # (x, y, z, roll, pitch, yaw)
+            ),
+        }
     )
+    
+    def __post_init__(self):
+        """Post initialization."""
+        for low_level_term in self.composer_action.low_level_actions.values():
+            low_level_term.asset_name = self.composer_action.asset_name
+            low_level_term.low_level_decimation = self.composer_action.low_level_decimation
 
 
 # @configclass
@@ -198,8 +203,8 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    pelvis_below_minimum = DoneTerm(func=mdp.pelvis_below_minimum, params={"minimum_height": 0.2})
-    bad_pelvis_ori = DoneTerm(func=mdp.bad_pelvis_ori, params={"limit_euler_angle": [1.0, 1.0]})
+    pelvis_below_minimum = DoneTerm(func=mdp.pelvis_below_minimum, params={"minimum_height": 0.25})
+    bad_pelvis_ori = DoneTerm(func=mdp.bad_pelvis_ori, params={"limit_euler_angle": [1.5, 1.5]})
 
 
 ##
@@ -255,3 +260,6 @@ class G1ComposerEnvCfgPlay(G1ComposerEnvCfg):
         self.scene.env_spacing = 2.5
         # disable randomization for play
         self.observations.policy.enable_corruption = False
+        
+        # use only argmax actions
+        self.actions.composer_action.test_mode = True

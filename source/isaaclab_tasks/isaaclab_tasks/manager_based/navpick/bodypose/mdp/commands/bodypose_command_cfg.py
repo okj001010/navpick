@@ -57,22 +57,6 @@ class BodyPoseCommandCfg(CommandTermCfg):
             ),
         }
     )
-    # goal_left_hip_pitch_visualizer_cfg: VisualizationMarkersCfg = RED_ARROW_X_MARKER_CFG.replace(
-    #     prim_path="/Visuals/Command/goal_left_hip_pitch"
-    # )
-    # goal_right_hip_pitch_visualizer_cfg: VisualizationMarkersCfg = RED_ARROW_X_MARKER_CFG.replace(
-    #     prim_path="/Visuals/Command/goal_right_hip_pitch"
-    # )
-    # current_left_hip_pitch_visualizer_cfg: VisualizationMarkersCfg = GREEN_ARROW_X_MARKER_CFG.replace(
-    #     prim_path="/Visuals/Command/current_left_hip_pitch",
-    # )
-    # current_right_hip_pitch_visualizer_cfg: VisualizationMarkersCfg = GREEN_ARROW_X_MARKER_CFG.replace(
-    #     prim_path="/Visuals/Command/current_right_hip_pitch"
-    # )
-    # goal_left_hip_pitch_visualizer_cfg.markers["arrow"].scale = (0.1, 0.1, 0.1)
-    # goal_right_hip_pitch_visualizer_cfg.markers["arrow"].scale = (0.1, 0.1, 0.1)
-    # current_left_hip_pitch_visualizer_cfg.markers["arrow"].scale = (0.1, 0.1, 0.1)
-    # current_right_hip_pitch_visualizer_cfg.markers["arrow"].scale = (0.1, 0.1, 0.1)
     
     goal_left_hip_pitch_visualizer_cfg = VisualizationMarkersCfg(
         prim_path="/Visuals/Command/goal_left_hip_pitch",
