@@ -130,18 +130,24 @@ class CommandsCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
     
-    # default reward
-    termination_penalty = RewTerm(
-        func=mdp.is_terminated_term,
-        params={"term_names": ["pelvis_below_minimum", "bad_pelvis_ori"]},
-        weight=-200.0,
-    )
-    
     # task reward
-    body_pose = RewTerm(func=mdp.body_pose_reward, weight=1.0, params={"command_name": "body_pose"})
-    
+    body_pose = RewTerm(
+        func=mdp.body_pose_reward,
+        weight=1.0,
+        params={
+            "hip_pitch_joint": ".*_hip_pitch_joint",
+            "command_name": "body_pose"
+        }
+    )
+
     # behavioral rewards
-    waist_roll_error = RewTerm(func=mdp.waist_roll_error, weight=1.0)
+    waist_roll_error = RewTerm(
+        func=mdp.waist_roll_error,
+        weight=1.0,
+        params={
+            "waist_pitch_joint_name": "waist_roll_joint",
+        }
+    )
     leg_pos_symmetry = RewTerm(
         func=mdp.leg_pos_symmetry,
         weight=-0.5,
